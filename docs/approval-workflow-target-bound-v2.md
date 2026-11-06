@@ -12,17 +12,17 @@
 
 1. The authenticated ECC owner calls `POST /approval/propose` with `action` and an exact `memory_id`.
 2. The API verifies the bearer session with Supabase Auth, checks trusted `app_metadata.ecc_role=owner`, and checks the server-side owner allowlist.
-3. The database assigns the proposer as `ecc-agent`; caller-supplied proposer identity is not accepted.
+3. The database records the server-assigned logical proposer label `ecc-agent`; caller-supplied proposer identity is not accepted. The current proposal route is still initiated by an authenticated owner session; this is not yet a separately authenticated autonomous agent identity.
 4. The database locks the current memory row, requires status `proposed`, records its UUID and revision, and hashes a canonical JSONB snapshot of all material memory fields.
 5. The owner reviews via `POST /approval/review`. The API supplies the UUID from the verified session; the database independently checks the owner allowlist and re-computes the target hash.
-6. Only the same enabled owner who reviewed the proposal may call `POST /approval/execute`. The database locks the approval and target rows, checks expiry, revision, current status, and hash, then atomically changes the memory status to `verified`, marks the approval `executed`, and writes an immutable event.
+6. Only the same enabled owner who reviewed the proposal may call `POST /approval/execute`. The database locks the approval and target rows, checks expiry, revision, current status, and hash, then atomically changes the memory status to `verified`, marks the approval `executed`, and writes an audit event.
 
 ## Security properties
 
 - Target UUID, revision and SHA-256 payload hash are stored in dedicated approval columns.
-- Proposer identity is server-assigned `ecc-agent`.
+- The proposal's logical actor is server-assigned `ecc-agent`. This is an application-level attribution label, not a separate cryptographic agent identity; proposal creation still requires the owner's authenticated session.
 - Reviewer/executor IDs are UUID columns and are verified against the enabled owner allowlist.
-- No self-approval by the agent is possible through this workflow.
+- The owner and logical `ecc-agent` actor are distinct for workflow review; the same enabled owner must review and execute. A dedicated agent credential is a separate future enhancement if autonomous agent-originated proposals are required.
 - Only the same reviewer can execute.
 - Hash/revision changes cause rejection at review or execution.
 - Partial unique index prevents multiple active approvals for one memory target.
