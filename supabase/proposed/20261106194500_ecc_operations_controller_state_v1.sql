@@ -57,6 +57,9 @@ alter table private.ecc_ops_tasks enable row level security;
 alter table private.ecc_ops_runs enable row level security;
 alter table private.ecc_ops_evidence enable row level security;
 
+-- Permit name resolution for the server-side role; table grants below remain narrow.
+grant usage on schema private to service_role;
+
 revoke all on table private.ecc_ops_tasks from public, anon, authenticated;
 revoke all on table private.ecc_ops_runs from public, anon, authenticated;
 revoke all on table private.ecc_ops_evidence from public, anon, authenticated;
