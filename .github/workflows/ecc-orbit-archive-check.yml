@@ -51,11 +51,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          audio_file="$(find projects/ecc-orbit-audio -type f \(
-            -iname '*.aac' -o -iname '*.m4a' -o -iname '*.mp3' -o
-            -iname '*.wav' -o -iname '*.flac' -o -iname '*.ogg' -o
-            -iname '*.opus'
-          \) -print -quit)"
+          audio_file="$(find projects/ecc-orbit-audio -type f \( -iname '*.aac' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' -o -iname '*.ogg' -o -iname '*.opus' \) -print -quit)"
           if [[ -n "$audio_file" ]]; then
             echo "::error file=$audio_file::Audio source/derived media must not be committed to this archive"
             exit 1
