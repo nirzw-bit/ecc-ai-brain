@@ -1,0 +1,63 @@
+name: ECC ORBIT archive integrity
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "projects/ecc-orbit-audio/**"
+      - ".github/workflows/ecc-orbit-archive-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/ecc-orbit-audio/**"
+      - ".github/workflows/ecc-orbit-archive-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  archive-integrity:
+    name: Verify archive structure and privacy boundary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify required project records
+        shell: bash
+        run: |
+          set -euo pipefail
+          required_files=(
+            "projects/ecc-orbit-audio/README.md"
+            "projects/ecc-orbit-audio/AGENTS.md"
+            "projects/ecc-orbit-audio/01_PROJECT_BRIEF.md"
+            "projects/ecc-orbit-audio/02_CONVERSATION_CONTEXT.md"
+            "projects/ecc-orbit-audio/03_STATUS_AND_NEXT_STEPS.md"
+            "projects/ecc-orbit-audio/04_PRIVACY_AND_CONSENT.md"
+            "projects/ecc-orbit-audio/05_PORTABLE_CONTINUATION_PROMPT.txt"
+            "projects/ecc-orbit-audio/05_TOOLING_AND_AUDIO.md"
+            "projects/ecc-orbit-audio/06_SOURCE_INVENTORY.md"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [[ ! -s "$file" ]]; then
+              echo "::error file=$file::Required project record is missing or empty"
+              exit 1
+            fi
+            echo "PASS: $file"
+          done
+
+      - name: Ensure source audio is not committed
+        shell: bash
+        run: |
+          set -euo pipefail
+          audio_file="$(find projects/ecc-orbit-audio -type f \\( \\
+            -iname '*.aac' -o -iname '*.m4a' -o -iname '*.mp3' -o \\
+            -iname '*.wav' -o -iname '*.flac' -o -iname '*.ogg' -o \\
+            -iname '*.opus' \\
+          \\) -print -quit)"
+          if [[ -n "$audio_file" ]]; then
+            echo "::error file=$audio_file::Audio source/derived media must not be committed to this archive"
+            exit 1
+          fi
+          echo "PASS: no audio media files found in the project archive"
