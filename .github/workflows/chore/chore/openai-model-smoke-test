@@ -1,0 +1,41 @@
+name: OpenAI model response smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  model-response:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request a harmless test response
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$OPENAI_API_KEY" ]]; then
+            echo "::error::OPENAI_API_KEY is not configured"
+            exit 1
+          fi
+
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+
+          curl --silent --show-error --fail \
+            --output "$response_file" \
+            https://api.openai.com/v1/responses \
+            -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            --data '{"model":"gpt-4.1-mini","input":"Reply with exactly: OPENAI_SMOKE_TEST_OK","max_output_tokens":30}'
+
+          response_text="$(jq -r '[.output[]?.content[]? | select(.type == "output_text") | .text] | join("")' "$response_file")"
+
+          if [[ "$response_text" != *"OPENAI_SMOKE_TEST_OK"* ]]; then
+            echo "::error::The API call returned, but the expected test response was not found"
+            exit 1
+          fi
+
+          echo "PASS: OpenAI returned the expected model response"
