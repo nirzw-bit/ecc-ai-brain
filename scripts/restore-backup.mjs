@@ -52,12 +52,15 @@ try {
   const manifestOutput = parseJsonOutput(run(["d1","execute",sourceDatabase,"--remote","--json","--command",
     "SELECT sha256 FROM backup_manifests WHERE object_key=" + "'" + key.replace(/'/g, "''") + "' LIMIT 1"]));
   const manifestRows = manifestOutput.flatMap(x => x.results ?? []);
-  if (manifestRows.length !== 1 || String(manifestRows[0].sha256).toLowerCase() !== expectedSha)
-    throw new Error("source D1 backup manifest does not match supplied key/SHA-256");
+  if (manifestRows.length !== 1 || !/^[a-f0-9]{64}$/i.test(String(manifestRows[0].sha256)))
+    throw new Error("source D1 backup manifest missing or invalid");
+  const manifestSha = String(manifestRows[0].sha256).toLowerCase();
+  if (suppliedSha && suppliedSha !== manifestSha)
+    throw new Error("optional supplied SHA-256 does not match source D1 manifest");
   run(["r2", "object", "get", bucket + "/" + key, "--file", backupPath, "--remote"]);
   const raw = readFileSync(backupPath);
   const actualSha = hash(raw);
-  if (actualSha !== expectedSha) throw new Error("archive SHA-256 mismatch");
+  if (actualSha !== manifestSha) throw new Error("archive SHA-256 does not match source manifest");
   const archive = JSON.parse(raw.toString("utf8"));
   if (archive.format !== "ecc-orbit-backup-v1" || archive.schemaVersion !== "0005")
     throw new Error("unsupported backup format/schema version");
