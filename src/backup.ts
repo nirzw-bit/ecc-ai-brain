@@ -28,7 +28,7 @@ export async function createBackup(env: Env, now = new Date()): Promise<{
   const body = JSON.stringify(envelope);
   const bytes = new TextEncoder().encode(body);
   if (bytes.byteLength > 2_000_000) throw new Error("backup_soft_size_limit_exceeded");
-  const sha256 = await sha256Hex(bytes.buffer);
+  const sha256 = await sha256Hex(bytes);
   const stamp = now.toISOString().replace(/[:.]/g, "-");
   const objectKey = "ecc-orbit/v1/" + stamp + "-" + sha256.slice(0, 16) + ".json";
   await env.BACKUPS.put(objectKey, bytes, {
