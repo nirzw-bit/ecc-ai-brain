@@ -40,8 +40,9 @@ export async function approveRequest(db: D1Database, approvalId: string, reviewe
   if (request.requester_id === reviewerId) throw new Error("self_approval_forbidden");
   if (Date.parse(request.expires_at) <= now.getTime()) throw new Error("approval_expired");
   const results = await db.batch([
-    db.prepare("UPDATE approval_requests SET status='approved',approver_id=? WHERE id=? AND status='pending' AND requester_id!=? AND expires_at>?")
-      .bind(reviewerId, approvalId, reviewerId, now.toISOString()),
+    db.prepare("UPDATE approval_requests SET status='approved',approver_id=? WHERE id=? AND status='pending' AND requester_id!=? AND expires_at>? " +
+      "AND EXISTS (SELECT 1 FROM owner_roles r JOIN owner_identity i ON i.id=r.owner_id WHERE i.issuer='https://github.com' AND i.subject=? AND r.role='reviewer' AND r.revoked_at IS NULL)")
+      .bind(reviewerId, approvalId, reviewerId, now.toISOString(), reviewerId),
     db.prepare("INSERT INTO approval_events (id,approval_id,event_type,actor_id,event_json,created_at) " +
       "SELECT ?,id,'approved',?,?,? FROM approval_requests WHERE id=? AND status='approved' AND approver_id=?")
       .bind(crypto.randomUUID(), reviewerId, JSON.stringify({}), now.toISOString(), approvalId, reviewerId)
@@ -66,8 +67,9 @@ export async function consumeApproval(db: D1Database, approvalId: string, actorI
   if (row.payload_sha256 !== await sha256Hex(canonicalJson(action.payload)))
     throw new Error("approval_payload_hash_mismatch");
   const results = await db.batch([
-    db.prepare("UPDATE approval_requests SET status='consumed' WHERE id=? AND status='approved' AND approver_id=? AND expires_at>?")
-      .bind(approvalId, actorId, now.toISOString()),
+    db.prepare("UPDATE approval_requests SET status='consumed' WHERE id=? AND status='approved' AND approver_id=? AND expires_at>? " +
+      "AND EXISTS (SELECT 1 FROM owner_roles r JOIN owner_identity i ON i.id=r.owner_id WHERE i.issuer='https://github.com' AND i.subject=? AND r.role='reviewer' AND r.revoked_at IS NULL)")
+      .bind(approvalId, actorId, now.toISOString(), actorId),
     db.prepare("INSERT INTO approval_events (id,approval_id,event_type,actor_id,event_json,created_at) " +
       "SELECT ?,id,'consumed',?,?,? FROM approval_requests WHERE id=? AND status='consumed' AND approver_id=?")
       .bind(crypto.randomUUID(), actorId, JSON.stringify({ actionType: action.actionType, target: action.target, scope: action.scope }),
