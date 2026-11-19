@@ -81,16 +81,12 @@ export default {
           const body = JSON.parse(raw) as {
             taskType?: string; taskKey?: string; dueAt?: string; payload?: Record<string, unknown>;
           };
-          if (!["heartbeat", "backup", "restore_test"].includes(body.taskType ?? "") ||
+          if (!["heartbeat", "backup"].includes(body.taskType ?? "") ||
               typeof body.taskKey !== "string" || !body.taskKey.trim() || body.taskKey.length > 120 ||
               typeof body.dueAt !== "string" || !Number.isFinite(Date.parse(body.dueAt)) ||
               Date.parse(body.dueAt) < Date.now() - 60_000)
             return json({ error: "invalid_task_payload" }, 400);
           const payload = body.payload ?? {};
-          if (body.taskType === "restore_test" &&
-              (typeof payload.objectKey !== "string" || typeof payload.sha256 !== "string" ||
-               !/^[a-f0-9]{64}$/i.test(payload.sha256)))
-            return json({ error: "restore_payload_invalid" }, 400);
           const id = crypto.randomUUID();
           await env.DB.prepare(
             "INSERT INTO operational_tasks (id,task_key,task_type,payload_json,due_at,status,max_attempts,created_at) " +
