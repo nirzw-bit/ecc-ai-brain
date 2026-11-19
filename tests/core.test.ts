@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { canonicalJson, sha256Hex } from "../src/crypto";
 import { validateApproval, type Approval } from "../src/approvals";
+import { buildMemoryVersion } from "../src/memory";
 
 describe("canonical JSON and approval safety", () => {
+  it("builds immutable version records with deterministic provenance and content hashes", async () => {
+    const v = await buildMemoryVersion("memory-1", {
+      memoryKey: "ecc.preference", content: "Evidence-backed",
+      provenance: { source: "chat", confidence: 0.9 }, status: "proposed"
+    }, 2, "2026-11-19T00:00:00.000Z");
+    expect(v.version).toBe(2);
+    expect(v.supersedesVersion).toBe(1);
+    expect(v.contentSha256).toBe(await sha256Hex("Evidence-backed"));
+    expect(v.provenanceJson).toBe('{"confidence":0.9,"source":"chat"}');
+  });
+  it("rejects invalid memory version numbers", async () => {
+    await expect(buildMemoryVersion("m1", {
+      memoryKey: "k", content: "x", provenance: {}, status: "proposed"
+    }, 0, "2026-11-19T00:00:00.000Z")).rejects.toThrow("invalid_version");
+  });
   it("sorts object keys deterministically", () => {
     expect(canonicalJson({ z: 1, a: { y: 2, x: 1 } })).toBe('{"a":{"x":1,"y":2},"z":1}');
   });
