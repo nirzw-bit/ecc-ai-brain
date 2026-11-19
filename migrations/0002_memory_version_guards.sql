@@ -16,12 +16,16 @@ WHEN NOT EXISTS (
   WHERE r.id = NEW.memory_id
     AND NEW.version = r.current_version + 1
     AND (
-      (r.current_version = 1 AND NEW.version = 1 AND NEW.supersedes_version IS NULL)
-      OR (r.current_version > 1 AND NEW.supersedes_version = r.current_version)
+      (r.current_version = 0 AND NEW.version = 1 AND NEW.supersedes_version IS NULL)
+      OR (r.current_version > 0 AND NEW.supersedes_version = r.current_version)
     )
 )
 BEGIN
   SELECT RAISE(ABORT, 'memory_version_must_be_next_and_supersede_current');
 END;
 
--- The first version is inserted when the record is initialized at current_version=0.
+CREATE TRIGGER memory_version_advance_pointer
+AFTER INSERT ON memory_versions
+BEGIN
+  UPDATE memory_records SET current_version = NEW.version WHERE id = NEW.memory_id;
+END;
