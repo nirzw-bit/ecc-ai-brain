@@ -8,6 +8,22 @@ This guide creates only isolated development resources. Do not change Supabase, 
 3. Do not add a paid plan, Workers Paid subscription, custom domain purchase, paid AI service or automatic upgrade.
 4. Use the account's workers.dev subdomain for this first deployment.
 
+## 1A. Android-only terminal option (optional)
+If you are provisioning from Android and do not have a desktop terminal, use GitHub Codespaces in the browser for the Wrangler commands:
+
+1. Open the repository on GitHub and switch to feat/ecc-orbit-cloudflare-v1.
+2. Select Code → Codespaces → Create codespace on feat/ecc-orbit-cloudflare-v1.
+3. Use the smallest available machine (2 cores) and set the idle timeout to 5 minutes.
+4. In the Codespaces terminal, confirm node --version and npm --version, then run the commands below.
+5. Run npx wrangler login and complete the Cloudflare browser authorization.
+6. Stop the Codespace as soon as the work is complete.
+
+Cost guard: personal GitHub Free accounts include 120 Codespaces core-hours and 15 GB-month storage. Usage beyond the included quota is blocked if there is no payment method; if a payment method exists, set a $0 Codespaces spending budget with “Stop usage when budget limit is reached” before creating a Codespace. Do not create prebuilds. Check usage and delete the Codespace when finished. This is an optional convenience, not part of the Cloudflare runtime.
+
+References:
+- https://docs.github.com/en/billing/concepts/product-billing/github-codespaces
+- https://docs.github.com/en/codespaces/troubleshooting/troubleshooting-included-usage
+
 ## 2. Create two D1 databases and one R2 bucket
 Run these commands from the repository root after installing Node.js LTS:
 
