@@ -6,9 +6,20 @@ const LEASE_SECONDS = 90;
 const MAX_ATTEMPTS = 3;
 
 export async function dispatchDueTasks(env: Env, now = new Date()): Promise<number> {
+  const nowIso = now.toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE operational_runs SET status='failed',finished_at=?,result_json=? " +
+      "WHERE status='running' AND task_id IN (SELECT id FROM operational_tasks " +
+      "WHERE status='leased' AND lease_until<=? AND attempts>=MIN(max_attempts,?))"
+    ).bind(nowIso, JSON.stringify({ error: "lease_expired_max_attempts" }), nowIso, MAX_ATTEMPTS),
+    env.DB.prepare(
+      "UPDATE operational_tasks SET status='failed',lease_owner=NULL,lease_until=NULL " +
+      "WHERE status='leased' AND lease_until<=? AND attempts>=MIN(max_attempts,?)"
+    ).bind(nowIso, MAX_ATTEMPTS)
+  ]);
   let processed = 0;
   for (let i = 0; i < MAX_TASKS_PER_TICK; i++) {
-    const nowIso = now.toISOString();
     const due = await env.DB.prepare(
       "SELECT id, task_key, task_type, due_at, lease_until, attempts, max_attempts FROM operational_tasks " +
       "WHERE ((status='pending' AND due_at<=?) OR (status='leased' AND lease_until<=?)) " +
