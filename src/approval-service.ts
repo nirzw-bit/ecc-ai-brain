@@ -6,20 +6,21 @@ export interface ApprovalAction {
 export async function requestApproval(db: D1Database, requesterId: string, action: ApprovalAction,
   expiresAt: string, now = new Date()) {
   if (!await activeRole(db, requesterId, "owner")) throw new Error("active_owner_role_required");
-  if (Date.parse(expiresAt) <= now.getTime()) throw new Error("approval_expiry_must_be_future");
+  const expiry = Date.parse(expiresAt);
+  if (!Number.isFinite(expiry) || expiry <= now.getTime() || expiry > now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    throw new Error("approval_expiry_must_be_within_seven_days");
   const id = crypto.randomUUID();
   const nonce = crypto.randomUUID();
   const payloadSha256 = await sha256Hex(canonicalJson(action.payload));
-  await db.prepare(
-    "INSERT INTO approval_requests (id,action_type,target,scope,payload_sha256,requester_id,expires_at,nonce,status,created_at) " +
-    "VALUES (?,?,?,?,?,?,?,?,?,?)"
-  ).bind(id, action.actionType, action.target, action.scope, payloadSha256,
-    requesterId, expiresAt, nonce, "pending", now.toISOString()).run();
-  await db.prepare(
-    "INSERT INTO approval_events (id,approval_id,event_type,actor_id,event_json,created_at) VALUES (?,?,?,?,?,?)"
-  ).bind(crypto.randomUUID(), id, "requested", requesterId,
-    JSON.stringify({ actionType: action.actionType, target: action.target, scope: action.scope, payloadSha256 }),
-    now.toISOString()).run();
+  await db.batch([
+    db.prepare("INSERT INTO approval_requests (id,action_type,target,scope,payload_sha256,requester_id,expires_at,nonce,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+      .bind(id, action.actionType, action.target, action.scope, payloadSha256,
+        requesterId, expiresAt, nonce, "pending", now.toISOString()),
+    db.prepare("INSERT INTO approval_events (id,approval_id,event_type,actor_id,event_json,created_at) VALUES (?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(), id, "requested", requesterId,
+        JSON.stringify({ actionType: action.actionType, target: action.target, scope: action.scope, payloadSha256 }),
+        now.toISOString())
+  ]);
   return { id, nonce, payloadSha256, status: "pending" as const };
 }
 
@@ -38,7 +39,8 @@ export async function approveRequest(db: D1Database, approvalId: string, reviewe
   ).bind(approvalId).first<{ requester_id: string; status: string; expires_at: string }>();
   if (!request || request.status !== "pending") throw new Error("approval_not_pending");
   if (request.requester_id === reviewerId) throw new Error("self_approval_forbidden");
-  if (Date.parse(request.expires_at) <= now.getTime()) throw new Error("approval_expired");
+  const requestExpiry = Date.parse(request.expires_at);
+  if (!Number.isFinite(requestExpiry) || requestExpiry <= now.getTime()) throw new Error("approval_expired");
   const results = await db.batch([
     db.prepare("UPDATE approval_requests SET status='approved',approver_id=? WHERE id=? AND status='pending' AND requester_id!=? AND expires_at>? " +
       "AND EXISTS (SELECT 1 FROM owner_roles r JOIN owner_identity i ON i.id=r.owner_id WHERE i.issuer='https://github.com' AND i.subject=? AND r.role='reviewer' AND r.revoked_at IS NULL)")
@@ -61,7 +63,8 @@ export async function consumeApproval(db: D1Database, approvalId: string, actorI
     }>();
   if (!row || row.status !== "approved" || row.approver_id !== actorId) throw new Error("approval_not_executable");
   if (row.requester_id === actorId) throw new Error("self_approval_forbidden");
-  if (Date.parse(row.expires_at) <= now.getTime()) throw new Error("approval_expired");
+  const rowExpiry = Date.parse(row.expires_at);
+  if (!Number.isFinite(rowExpiry) || rowExpiry <= now.getTime()) throw new Error("approval_expired");
   if (row.action_type !== action.actionType || row.target !== action.target || row.scope !== action.scope)
     throw new Error("approval_action_binding_mismatch");
   if (row.payload_sha256 !== await sha256Hex(canonicalJson(action.payload)))
