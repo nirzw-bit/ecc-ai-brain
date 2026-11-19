@@ -57,6 +57,11 @@ export async function requireOwner(request: Request, env: Env): Promise<{ login:
     };
     if (data.iss !== "ecc-orbit" || data.login !== env.OWNER_GITHUB_LOGIN || !data.sub ||
         !data.exp || data.exp <= Math.floor(Date.now() / 1000)) return null;
+    const activeOwner = await env.DB.prepare(
+      "SELECT 1 AS ok FROM owner_identity i JOIN owner_roles r ON r.owner_id=i.id " +
+      "WHERE i.issuer=? AND i.subject=? AND r.role='owner' AND r.revoked_at IS NULL LIMIT 1"
+    ).bind("https://github.com", data.sub).first<{ ok: number }>();
+    if (!activeOwner) return null;
     return { login: data.login };
   } catch { return null; }
 }
