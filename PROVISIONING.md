@@ -64,10 +64,11 @@ After the Worker has been deployed once and the final workers.dev URL is known, 
 npx wrangler secret put GITHUB_OAUTH_CLIENT_ID
 npx wrangler secret put GITHUB_OAUTH_CLIENT_SECRET
 npx wrangler secret put OWNER_GITHUB_LOGIN
+npx wrangler secret put REVIEWER_GITHUB_LOGINS
 npx wrangler secret put SESSION_HMAC_KEY
 ~~~
 
-Enter the values only in the local Wrangler prompt. OWNER_GITHUB_LOGIN must be the exact GitHub login authorized as owner. Generate SESSION_HMAC_KEY locally with a cryptographically secure generator, for example:
+Enter the values only in the local Wrangler prompt. OWNER_GITHUB_LOGIN must be the exact GitHub login authorized as owner. REVIEWER_GITHUB_LOGINS is a comma-separated allowlist containing at least one distinct GitHub login for the independent reviewer; do not include the owner login. The reviewer must be able to sign in with GitHub separately. Approval endpoints are reviewer-only, and the consume route is mock-only (it never executes an external action). Generate SESSION_HMAC_KEY locally with a cryptographically secure generator, for example:
 
 ~~~sh
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
