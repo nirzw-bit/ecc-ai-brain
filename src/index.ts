@@ -72,6 +72,36 @@ export default {
       if (!owner) return json({ error: "unauthorized" }, 401);
       if (url.pathname === "/api/me" && request.method === "GET")
         return json({ authenticated: true, login: owner.login });
+      if (url.pathname === "/api/tasks" && request.method === "POST") {
+        if (!request.headers.get("content-type")?.includes("application/json"))
+          return json({ error: "application_json_required" }, 415);
+        try {
+          const raw = await request.text();
+          if (raw.length > 8_000) return json({ error: "request_too_large" }, 413);
+          const body = JSON.parse(raw) as {
+            taskType?: string; taskKey?: string; dueAt?: string; payload?: Record<string, unknown>;
+          };
+          if (!["heartbeat", "backup", "restore_test"].includes(body.taskType ?? "") ||
+              typeof body.taskKey !== "string" || !body.taskKey.trim() || body.taskKey.length > 120 ||
+              typeof body.dueAt !== "string" || !Number.isFinite(Date.parse(body.dueAt)) ||
+              Date.parse(body.dueAt) < Date.now() - 60_000)
+            return json({ error: "invalid_task_payload" }, 400);
+          const payload = body.payload ?? {};
+          if (body.taskType === "restore_test" &&
+              (typeof payload.objectKey !== "string" || typeof payload.sha256 !== "string" ||
+               !/^[a-f0-9]{64}$/i.test(payload.sha256)))
+            return json({ error: "restore_payload_invalid" }, 400);
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO operational_tasks (id,task_key,task_type,payload_json,due_at,status,max_attempts,created_at) " +
+            "VALUES (?,?,?,?,?,'pending',3,?)"
+          ).bind(id, body.taskKey, body.taskType, JSON.stringify(payload), new Date(body.dueAt).toISOString(),
+            new Date().toISOString()).run();
+          return json({ ok: true, taskId: id, status: "pending" }, 201);
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "task_creation_failed" }, 400);
+        }
+      }
       if (url.pathname === "/api/approvals" && request.method === "POST") {
         if (!request.headers.get("content-type")?.includes("application/json"))
           return json({ error: "application_json_required" }, 415);
