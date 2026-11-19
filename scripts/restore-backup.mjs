@@ -76,7 +76,6 @@ try {
     throw new Error("restore target is not empty; refusing to overwrite existing test data");
 
   const statements = [];
-  statements.push("PRAGMA foreign_keys=ON;");
   for (const table of TABLES) {
     let rows = archive.tables[table];
     if (table === "memory_versions") rows = [...rows].sort((a,b) => a.version - b.version);
