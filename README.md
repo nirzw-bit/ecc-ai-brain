@@ -33,6 +33,7 @@ npm run typecheck
 npm test
 python3 scripts/validate_migrations.py
 npx wrangler dev
+node scripts/restore-backup.mjs --help
 ~~~
 
 Cloudflare resource IDs are intentionally placeholders until the owner provisions the two D1 databases and one R2 bucket. No secrets are stored in the repository.
