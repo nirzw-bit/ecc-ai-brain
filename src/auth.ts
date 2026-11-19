@@ -39,7 +39,7 @@ async function issueSession(env: Env, login: string, subject: string): Promise<s
   return payload + "." + b64url(await hmac(env.SESSION_HMAC_KEY, payload));
 }
 
-export async function requireOwner(request: Request, env: Env): Promise<{ login: string } | null> {
+export async function requireOwner(request: Request, env: Env): Promise<{ login: string; subject: string } | null> {
   if (!env.OWNER_GITHUB_LOGIN || !env.SESSION_HMAC_KEY || env.SESSION_HMAC_KEY.length < 32) return null;
   const token = cookie(request, COOKIE);
   if (!token) return null;
