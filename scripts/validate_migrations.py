@@ -41,4 +41,41 @@ for statement in [
     else:
         raise AssertionError(f"guard failed to reject: {statement}")
 
-print(f"PASS: {len(expected)} required tables; {len(migrations)} migrations; append-only, sequential version and supersession guards")
+# Approval lifecycle, reviewer separation, and immutable audit-event guards.
+db.execute("INSERT INTO owner_identity VALUES('owner','https://github.com','100','2026-11-19T00:00:00Z')")
+db.execute("INSERT INTO owner_identity VALUES('reviewer','https://github.com','200','2026-11-19T00:00:00Z')")
+db.execute("INSERT INTO owner_roles(id,owner_id,role,granted_at) VALUES('ro','owner','owner','2026-11-19T00:00:00Z')")
+db.execute("INSERT INTO owner_roles(id,owner_id,role,granted_at) VALUES('rr','reviewer','reviewer','2026-11-19T00:00:00Z')")
+try:
+    db.execute("INSERT INTO owner_roles(id,owner_id,role,granted_at) VALUES('rr2','reviewer','reviewer','2026-11-19T00:00:00Z')")
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("duplicate active reviewer role was accepted")
+
+db.execute("""INSERT INTO approval_requests
+(id,action_type,target,scope,payload_sha256,requester_id,expires_at,nonce,status,created_at)
+VALUES('a1','deploy','dev','dev','hash','100','2099-01-01T00:00:00Z','nonce-1','pending','2026-11-19T00:00:00Z')""")
+db.execute("UPDATE approval_requests SET status='approved',approver_id='200' WHERE id='a1'")
+for statement in [
+    "UPDATE approval_requests SET status='consumed' WHERE id='a1'",
+    "UPDATE approval_requests SET approver_id='100' WHERE id='a1'",
+    "UPDATE approval_events SET event_type='tampered' WHERE id='none'"
+]:
+    try:
+        db.execute(statement)
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        if "approval_events" not in statement:
+            raise AssertionError(f"approval guard failed to reject: {statement}")
+
+db.execute("INSERT INTO approval_events VALUES('ae1','a1','approved','200','{}','2026-11-19T00:00:01Z')")
+try:
+    db.execute("DELETE FROM approval_events WHERE id='ae1'")
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("approval event deletion was accepted")
+
+print(f"PASS: {len(expected)} required tables; {len(migrations)} migrations; append-only memory, sequential supersession, role uniqueness and approval lifecycle guards")
