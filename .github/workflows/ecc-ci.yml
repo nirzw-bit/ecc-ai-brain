@@ -21,3 +21,5 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm test
+      - name: Validate ordered D1 migrations and append-only invariants
+        run: python3 scripts/validate_migrations.py
