@@ -56,9 +56,14 @@ else:
 db.execute("""INSERT INTO approval_requests
 (id,action_type,target,scope,payload_sha256,requester_id,expires_at,nonce,status,created_at)
 VALUES('a1','deploy','dev','dev','hash','100','2099-01-01T00:00:00Z','nonce-1','pending','2026-11-19T00:00:00Z')""")
+try:
+    db.execute("UPDATE approval_requests SET status='consumed' WHERE id='a1'")
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("pending approval was allowed to become consumed")
 db.execute("UPDATE approval_requests SET status='approved',approver_id='200' WHERE id='a1'")
 for statement in [
-    "UPDATE approval_requests SET status='consumed' WHERE id='a1'",
     "UPDATE approval_requests SET approver_id='100' WHERE id='a1'"
 ]:
     try:
