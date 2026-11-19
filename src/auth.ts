@@ -3,6 +3,7 @@ import type { Env } from "./types";
 const COOKIE = "ecc_orbit_session";
 const STATE_COOKIE = "ecc_orbit_oauth_state";
 const SESSION_SECONDS = 900;
+type Session = { login: string; subject: string };
 
 function b64url(bytes: Uint8Array): string {
   let binary = "";
@@ -25,13 +26,17 @@ function cookie(request: Request, name: string): string | null {
 function setCookie(name: string, value: string, maxAge: number): string {
   return name + "=" + value + "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=" + maxAge;
 }
+function reviewerLogins(env: Env): string[] {
+  return (env.REVIEWER_GITHUB_LOGINS ?? "").split(",").map(v => v.trim()).filter(Boolean);
+}
 async function hmac(keyText: string, message: string): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(keyText),
     { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)));
 }
 async function issueSession(env: Env, login: string, subject: string): Promise<string> {
-  if (!env.SESSION_HMAC_KEY || env.SESSION_HMAC_KEY.length < 32) throw new Error("session_signing_key_not_configured");
+  if (!env.SESSION_HMAC_KEY || env.SESSION_HMAC_KEY.length < 32)
+    throw new Error("session_signing_key_not_configured");
   const now = Math.floor(Date.now() / 1000);
   const payload = b64url(new TextEncoder().encode(JSON.stringify({
     sub: subject, login, iat: now, exp: now + SESSION_SECONDS, iss: "ecc-orbit"
@@ -39,8 +44,8 @@ async function issueSession(env: Env, login: string, subject: string): Promise<s
   return payload + "." + b64url(await hmac(env.SESSION_HMAC_KEY, payload));
 }
 
-export async function requireOwner(request: Request, env: Env): Promise<{ login: string; subject: string } | null> {
-  if (!env.OWNER_GITHUB_LOGIN || !env.SESSION_HMAC_KEY || env.SESSION_HMAC_KEY.length < 32) return null;
+async function readSession(request: Request, env: Env): Promise<Session | null> {
+  if (!env.SESSION_HMAC_KEY || env.SESSION_HMAC_KEY.length < 32) return null;
   const token = cookie(request, COOKIE);
   if (!token) return null;
   const [payload, signature, extra] = token.split(".");
@@ -55,15 +60,27 @@ export async function requireOwner(request: Request, env: Env): Promise<{ login:
     const data = JSON.parse(new TextDecoder().decode(decodeB64url(payload))) as {
       sub?: string; login?: string; exp?: number; iss?: string;
     };
-    if (data.iss !== "ecc-orbit" || data.login !== env.OWNER_GITHUB_LOGIN || !data.sub ||
+    if (data.iss !== "ecc-orbit" || !data.login || !data.sub ||
         !data.exp || data.exp <= Math.floor(Date.now() / 1000)) return null;
-    const activeOwner = await env.DB.prepare(
-      "SELECT 1 AS ok FROM owner_identity i JOIN owner_roles r ON r.owner_id=i.id " +
-      "WHERE i.issuer=? AND i.subject=? AND r.role='owner' AND r.revoked_at IS NULL LIMIT 1"
-    ).bind("https://github.com", data.sub).first<{ ok: number }>();
-    if (!activeOwner) return null;
     return { login: data.login, subject: data.sub };
   } catch { return null; }
+}
+async function requireRole(request: Request, env: Env, role: "owner" | "reviewer"): Promise<Session | null> {
+  const session = await readSession(request, env);
+  if (!session) return null;
+  if (role === "owner" && session.login !== env.OWNER_GITHUB_LOGIN) return null;
+  if (role === "reviewer" && !reviewerLogins(env).includes(session.login)) return null;
+  const active = await env.DB.prepare(
+    "SELECT 1 AS ok FROM owner_identity i JOIN owner_roles r ON r.owner_id=i.id " +
+    "WHERE i.issuer=? AND i.subject=? AND r.role=? AND r.revoked_at IS NULL LIMIT 1"
+  ).bind("https://github.com", session.subject, role).first<{ ok: number }>();
+  return active ? session : null;
+}
+export async function requireOwner(request: Request, env: Env): Promise<Session | null> {
+  return requireRole(request, env, "owner");
+}
+export async function requireReviewer(request: Request, env: Env): Promise<Session | null> {
+  return requireRole(request, env, "reviewer");
 }
 
 export async function handleAuth(request: Request, env: Env): Promise<Response | null> {
@@ -108,17 +125,19 @@ export async function handleAuth(request: Request, env: Env): Promise<Response |
     });
     if (!userResponse.ok) return new Response("GitHub identity verification failed.", { status: 502 });
     const user = await userResponse.json() as { login?: string; id?: number };
-    if (user.login !== env.OWNER_GITHUB_LOGIN || !user.id)
+    const isOwner = user.login === env.OWNER_GITHUB_LOGIN;
+    const isReviewer = !!user.login && reviewerLogins(env).includes(user.login);
+    if ((!isOwner && !isReviewer) || !user.login || !user.id)
       return new Response("This GitHub identity is not authorized.", { status: 403 });
-    const identityId = crypto.randomUUID();
+    const role = isOwner ? "owner" : "reviewer";
     const now = new Date().toISOString();
     await env.DB.batch([
       env.DB.prepare("INSERT OR IGNORE INTO owner_identity (id,issuer,subject,created_at) VALUES (?,?,?,?)")
-        .bind(identityId, "https://github.com", String(user.id), now),
+        .bind(crypto.randomUUID(), "https://github.com", String(user.id), now),
       env.DB.prepare("INSERT OR IGNORE INTO owner_roles (id,owner_id,role,granted_at) " +
-        "SELECT ?,id,'owner',? FROM owner_identity WHERE issuer=? AND subject=? " +
-        "AND NOT EXISTS (SELECT 1 FROM owner_roles WHERE owner_id=owner_identity.id AND role='owner' AND revoked_at IS NULL)")
-        .bind(crypto.randomUUID(), now, "https://github.com", String(user.id))
+        "SELECT ?,id,?,?,? FROM owner_identity WHERE issuer=? AND subject=? " +
+        "AND NOT EXISTS (SELECT 1 FROM owner_roles WHERE owner_id=owner_identity.id AND role=? AND revoked_at IS NULL)")
+        .bind(crypto.randomUUID(), role, now, now, "https://github.com", String(user.id), role)
     ]);
     const session = await issueSession(env, user.login, String(user.id));
     const headers = new Headers({ Location: "/", "Cache-Control": "no-store" });
