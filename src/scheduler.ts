@@ -1,5 +1,5 @@
 import type { Env } from "./types";
-import { createBackup } from "./backup";
+import { createBackup, restoreBackupToTestDatabase } from "./backup";
 
 const MAX_TASKS_PER_TICK = 1;
 const LEASE_SECONDS = 90;
@@ -21,11 +21,11 @@ export async function dispatchDueTasks(env: Env, now = new Date()): Promise<numb
   let processed = 0;
   for (let i = 0; i < MAX_TASKS_PER_TICK; i++) {
     const due = await env.DB.prepare(
-      "SELECT id, task_key, task_type, due_at, lease_until, attempts, max_attempts FROM operational_tasks " +
+      "SELECT id, task_key, task_type, payload_json, due_at, lease_until, attempts, max_attempts FROM operational_tasks " +
       "WHERE ((status='pending' AND due_at<=?) OR (status='leased' AND lease_until<=?)) " +
       "AND attempts<max_attempts ORDER BY due_at LIMIT 1"
     ).bind(nowIso, nowIso).first<{
-      id: string; task_key: string; task_type: string; due_at: string; lease_until: string | null;
+      id: string; task_key: string; task_type: string; payload_json: string; due_at: string; lease_until: string | null;
       attempts: number; max_attempts: number;
     }>();
     if (!due) break;
@@ -53,6 +53,10 @@ export async function dispatchDueTasks(env: Env, now = new Date()): Promise<numb
     try {
       if (due.task_type === "backup") {
         await createBackup(env, now);
+      } else if (due.task_type === "restore_test") {
+        const payload = JSON.parse(due.payload_json) as { objectKey?: string; sha256?: string };
+        if (!payload.objectKey || !payload.sha256) throw new Error("restore_payload_invalid");
+        await restoreBackupToTestDatabase(env, payload.objectKey, payload.sha256);
       } else if (due.task_type === "heartbeat") {
         await env.DB.prepare(
           "INSERT INTO system_events (id,event_type,severity,detail_json,created_at) VALUES (?,?,?,?,?)"
