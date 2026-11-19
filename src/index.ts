@@ -1,8 +1,8 @@
 import type { Env } from "./types";
-import { handleAuth, requireOwner } from "./auth";
+import { handleAuth, requireOwner, requireReviewer } from "./auth";
 import { dispatchDueTasks } from "./scheduler";
 import { appendMemoryVersion } from "./memory";
-import { requestApproval } from "./approval-service";
+import { requestApproval, approveRequest, consumeApproval } from "./approval-service";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
   status, headers: {
@@ -67,6 +67,33 @@ export default {
     if (url.pathname === "/" && request.method === "GET") return page();
     if (url.pathname === "/health" && request.method === "GET")
       return json({ ok: true, service: "ecc-orbit", mode: "development" });
+    const approvalRoute = url.pathname.match(/^\\/api\\/approvals\\/([a-f0-9-]+)\\/(approve|consume)$/i);
+    if (approvalRoute && request.method === "POST") {
+      const reviewer = await requireReviewer(request, env);
+      if (!reviewer) return json({ error: "unauthorized_reviewer" }, 401);
+      try {
+        if (approvalRoute[2] === "approve") {
+          const result = await approveRequest(env.DB, approvalRoute[1], reviewer.subject);
+          return json(result);
+        }
+        if (!request.headers.get("content-type")?.includes("application/json"))
+          return json({ error: "application_json_required" }, 415);
+        const raw = await request.text();
+        if (raw.length > 16_000) return json({ error: "request_too_large" }, 413);
+        const body = JSON.parse(raw) as {
+          actionType?: string; target?: string; scope?: string; payload?: unknown;
+        };
+        if (typeof body.actionType !== "string" || typeof body.target !== "string" ||
+            typeof body.scope !== "string" || body.payload === undefined)
+          return json({ error: "invalid_approval_payload" }, 400);
+        const result = await consumeApproval(env.DB, approvalRoute[1], reviewer.subject, {
+          actionType: body.actionType, target: body.target, scope: body.scope, payload: body.payload
+        });
+        return json({ ...result, execution: "mock_only_no_external_action" });
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : "approval_transition_failed" }, 400);
+      }
+    }
     if (url.pathname.startsWith("/api/")) {
       const owner = await requireOwner(request, env);
       if (!owner) return json({ error: "unauthorized" }, 401);
