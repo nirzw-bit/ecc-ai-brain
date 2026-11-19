@@ -87,3 +87,43 @@ for statement in [
         raise AssertionError(f"approval event immutability failed: {statement}")
 
 print(f"PASS: {len(expected)} required tables; {len(migrations)} migrations; append-only memory, sequential supersession, role uniqueness and approval lifecycle guards")
+
+# Additional immutable evidence and operational audit ledgers.
+try:
+    db.execute("DELETE FROM memory_records WHERE id='m1'")
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("memory record deletion was accepted")
+
+db.execute("INSERT INTO system_events VALUES('se1','test','info','{}','2026-11-19T00:00:02Z')")
+db.execute("INSERT INTO quota_observations VALUES('q1','d1_reads',1,100,'rows','2026-11-19T00:00:02Z')")
+db.execute("INSERT INTO external_probes VALUES('p1','health','ok',1,'2026-11-19T00:00:02Z','{}')")
+db.execute("INSERT INTO backup_manifests VALUES('b1','ecc-orbit/v1/test.json','0005','hash',2,'{}','2026-11-19T00:00:02Z','2026-11-19T00:00:02Z')")
+for statement in [
+    "UPDATE system_events SET severity='critical' WHERE id='se1'",
+    "DELETE FROM system_events WHERE id='se1'",
+    "UPDATE quota_observations SET observed_value=999 WHERE id='q1'",
+    "DELETE FROM quota_observations WHERE id='q1'",
+    "UPDATE external_probes SET status='bad' WHERE id='p1'",
+    "DELETE FROM external_probes WHERE id='p1'",
+    "UPDATE backup_manifests SET sha256='tampered' WHERE id='b1'",
+    "DELETE FROM backup_manifests WHERE id='b1'"
+]:
+    try:
+        db.execute(statement)
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise AssertionError(f"append-only ledger guard failed: {statement}")
+
+db.execute("INSERT INTO operational_runs(id,task_id,idempotency_key,status,attempt,started_at) VALUES('run1',NULL,'key1','running',1,'2026-11-19T00:00:00Z')")
+db.execute("UPDATE operational_runs SET status='succeeded',finished_at='2026-11-19T00:00:01Z' WHERE id='run1'")
+try:
+    db.execute("UPDATE operational_runs SET status='failed' WHERE id='run1'")
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("terminal operational run was allowed to mutate")
+
+print("PASS: append-only memory, identity, evidence, quota, probe, backup and approval ledgers; sequential version and run lifecycle guards")
