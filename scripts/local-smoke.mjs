@@ -31,6 +31,11 @@ try {
   await assertStatus("/api/me", 401);
   await assertStatus("/api/memory?key=unauthorized", 401);
   await assertStatus("/api/approvals", 401);
+  await assertStatus("/api/approvals/00000000-0000-4000-8000-000000000000/approve", 401, { method: "POST" });
+  await assertStatus("/api/approvals/00000000-0000-4000-8000-000000000000/consume", 401, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ actionType: "deploy", target: "dev", scope: "dev", payload: {} })
+  });
   await assertStatus("/api/tasks", 401, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ taskType: "backup", taskKey: "unauthorized", dueAt: new Date().toISOString() })
