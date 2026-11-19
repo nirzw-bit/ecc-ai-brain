@@ -10,11 +10,11 @@ export async function dispatchDueTasks(env: Env, now = new Date()): Promise<numb
   for (let i = 0; i < MAX_TASKS_PER_TICK; i++) {
     const nowIso = now.toISOString();
     const due = await env.DB.prepare(
-      "SELECT id, task_key, task_type, due_at, attempts, max_attempts FROM operational_tasks " +
+      "SELECT id, task_key, task_type, due_at, lease_until, attempts, max_attempts FROM operational_tasks " +
       "WHERE ((status='pending' AND due_at<=?) OR (status='leased' AND lease_until<=?)) " +
       "AND attempts<max_attempts ORDER BY due_at LIMIT 1"
     ).bind(nowIso, nowIso).first<{
-      id: string; task_key: string; task_type: string; due_at: string;
+      id: string; task_key: string; task_type: string; due_at: string; lease_until: string | null;
       attempts: number; max_attempts: number;
     }>();
     if (!due) break;
