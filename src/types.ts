@@ -4,5 +4,6 @@ export interface Env {
   GITHUB_OAUTH_CLIENT_ID?: string;
   GITHUB_OAUTH_CLIENT_SECRET?: string;
   OWNER_GITHUB_LOGIN?: string;
+  REVIEWER_GITHUB_LOGINS?: string;
   SESSION_HMAC_KEY?: string;
 }
