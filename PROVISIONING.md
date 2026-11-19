@@ -89,7 +89,11 @@ Only after owner login and both D1 databases are verified:
 2. Wait for the single hourly Cron Trigger or invoke the same dispatcher locally against a local D1 test instance.
 3. Confirm one operational_runs row, one system_events heartbeat record, task status succeeded, and no duplicate run after the next Cron tick.
 4. Insert one backup task. Confirm R2 object creation, read-back SHA-256 verification and backup_manifests row.
-5. Run restoreBackupToTestDatabase against the separate restore-test D1 only after that database has the same migrations applied. Compare all 16 table counts and per-table hashes.
+5. Restore locally through Wrangler (no Worker route or extra runtime is required):
+   ~~~sh
+   node scripts/restore-backup.mjs --key ecc-orbit/v1/<backup-file>.json --sha256 <64-hex-sha256>
+   ~~~
+   The script verifies the source D1 manifest, downloads the R2 object through Wrangler, verifies the whole-object SHA-256 and all per-table hashes, refuses a non-empty target D1, imports the archive with memory-version triggers in order, and verifies all 16 table counts and per-table hashes.
 
 Do not restore into the primary D1. Do not expose restore operations as a public route.
 
