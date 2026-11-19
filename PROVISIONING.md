@@ -107,9 +107,9 @@ Only after owner login and both D1 databases are verified:
 4. Insert one backup task. Confirm R2 object creation, read-back SHA-256 verification and backup_manifests row.
 5. Restore locally through Wrangler (no Worker route or extra runtime is required):
    ~~~sh
-   node scripts/restore-backup.mjs --key ecc-orbit/v1/<backup-file>.json --sha256 <64-hex-sha256>
+   npm run restore:test -- --key ecc-orbit/v1/<backup-file>.json
    ~~~
-   The script verifies the source D1 manifest, downloads the R2 object through Wrangler, verifies the whole-object SHA-256 and all per-table hashes, refuses a non-empty target D1, imports the archive with memory-version triggers in order, and verifies all 16 table counts and per-table hashes.
+   The script reads the expected SHA-256 from the source D1 manifest, downloads the R2 object through Wrangler, verifies the whole-object and per-table hashes, refuses a non-empty target D1, imports memory versions in order, and verifies all 16 table counts and per-table hashes. The source, bucket and restore target are fixed in the script; the restore target cannot be changed by command-line input.
 
 Do not restore into the primary D1. Do not expose restore operations as a public route.
 
