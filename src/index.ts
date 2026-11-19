@@ -2,6 +2,7 @@ import type { Env } from "./types";
 import { handleAuth, requireOwner } from "./auth";
 import { dispatchDueTasks } from "./scheduler";
 import { appendMemoryVersion } from "./memory";
+import { requestApproval } from "./approval-service";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
   status, headers: {
@@ -71,6 +72,34 @@ export default {
       if (!owner) return json({ error: "unauthorized" }, 401);
       if (url.pathname === "/api/me" && request.method === "GET")
         return json({ authenticated: true, login: owner.login });
+      if (url.pathname === "/api/approvals" && request.method === "POST") {
+        if (!request.headers.get("content-type")?.includes("application/json"))
+          return json({ error: "application_json_required" }, 415);
+        try {
+          const raw = await request.text();
+          if (raw.length > 16_000) return json({ error: "request_too_large" }, 413);
+          const body = JSON.parse(raw) as {
+            actionType?: string; target?: string; scope?: string; payload?: unknown; expiresAt?: string;
+          };
+          if (typeof body.actionType !== "string" || typeof body.target !== "string" ||
+              typeof body.scope !== "string" || body.payload === undefined ||
+              typeof body.expiresAt !== "string")
+            return json({ error: "invalid_approval_payload" }, 400);
+          const approval = await requestApproval(env.DB, owner.subject, {
+            actionType: body.actionType, target: body.target, scope: body.scope, payload: body.payload
+          }, body.expiresAt);
+          return json(approval, 201);
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "approval_request_failed" }, 400);
+        }
+      }
+      if (url.pathname === "/api/approvals" && request.method === "GET") {
+        const approvals = await env.DB.prepare(
+          "SELECT id,action_type,target,scope,payload_sha256,requester_id,approver_id,expires_at,status,created_at " +
+          "FROM approval_requests ORDER BY created_at DESC LIMIT 50"
+        ).all();
+        return json({ approvals: approvals.results });
+      }
       if (url.pathname === "/api/memory" && request.method === "POST") {
         if (!request.headers.get("content-type")?.includes("application/json"))
           return json({ error: "application_json_required" }, 415);
