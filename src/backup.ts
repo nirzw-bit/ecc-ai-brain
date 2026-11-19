@@ -16,8 +16,8 @@ export async function createBackup(env: Env, now = new Date()): Promise<{
   const counts: Record<string, number> = {};
   const tableHashes: Record<string, string> = {};
   for (const table of BACKUP_TABLES) {
-    const result = await env.DB.prepare("SELECT * FROM " + table + " ORDER BY rowid LIMIT 1001").all();
-    if (result.results.length > 1000) throw new Error("backup_row_soft_limit_exceeded:" + table);
+    const result = await env.DB.prepare("SELECT * FROM " + table + " ORDER BY rowid LIMIT 251").all();
+    if (result.results.length > 250) throw new Error("backup_row_soft_limit_exceeded:" + table);
     data[table] = result.results as unknown[];
     counts[table] = result.results.length;
     tableHashes[table] = await sha256Hex(canonicalJson(data[table]));
@@ -27,7 +27,7 @@ export async function createBackup(env: Env, now = new Date()): Promise<{
     createdAt: now.toISOString(), tables: data, counts, tableHashes
   };
   const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-  if (bytes.byteLength > 2_000_000) throw new Error("backup_soft_size_limit_exceeded");
+  if (bytes.byteLength > 512_000) throw new Error("backup_soft_size_limit_exceeded");
   const sha256 = await sha256Hex(bytes);
   const stamp = now.toISOString().replace(/[:.]/g, "-");
   const objectKey = "ecc-orbit/v1/" + stamp + "-" + sha256.slice(0, 16) + ".json";
