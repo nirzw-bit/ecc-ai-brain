@@ -16,12 +16,13 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((all, value, i, lis
   return all;
 }, []));
 const key = args.key;
-const expectedSha = args.sha256?.toLowerCase();
-const bucket = args.bucket ?? "ecc-orbit-backups-dev";
-const database = args.database ?? "ecc-orbit-restore-test";
-const sourceDatabase = args["source-database"] ?? "ecc-orbit-dev";
-if (!/^ecc-orbit\/v1\/[a-zA-Z0-9._-]+\.json$/.test(key ?? "") || !/^[a-f0-9]{64}$/.test(expectedSha ?? "")) {
-  console.error("Usage: node scripts/restore-backup.mjs --key ecc-orbit/v1/<file>.json --sha256 <64-hex> [--bucket ecc-orbit-backups-dev] [--database ecc-orbit-restore-test] [--source-database ecc-orbit-dev]");
+const suppliedSha = args.sha256?.toLowerCase();
+const bucket = "ecc-orbit-backups-dev";
+const database = "ecc-orbit-restore-test";
+const sourceDatabase = "ecc-orbit-dev";
+if (!/^ecc-orbit\\/v1\\/[a-zA-Z0-9._-]+\\.json$/.test(key ?? "") ||
+    (suppliedSha !== undefined && !/^[a-f0-9]{64}$/.test(suppliedSha))) {
+  console.error("Usage: node scripts/restore-backup.mjs --key ecc-orbit/v1/<file>.json [--sha256 <optional-64-hex-check>]");
   process.exit(2);
 }
 const run = (argv) => execFileSync("npx", ["wrangler", ...argv], {
