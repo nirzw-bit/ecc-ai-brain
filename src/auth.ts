@@ -62,7 +62,7 @@ export async function requireOwner(request: Request, env: Env): Promise<{ login:
       "WHERE i.issuer=? AND i.subject=? AND r.role='owner' AND r.revoked_at IS NULL LIMIT 1"
     ).bind("https://github.com", data.sub).first<{ ok: number }>();
     if (!activeOwner) return null;
-    return { login: data.login };
+    return { login: data.login, subject: data.sub };
   } catch { return null; }
 }
 
