@@ -48,13 +48,10 @@ export async function requireOwner(request: Request, env: Env): Promise<{ login:
   try {
     const expected = await hmac(env.SESSION_HMAC_KEY, payload);
     const supplied = decodeB64url(signature);
-    if (expected.length !== supplied.length || !crypto.subtle.timingSafeEqual) {
-      // Web Crypto does not expose timingSafeEqual in all Workers runtimes.
-      if (expected.length !== supplied.length) return null;
-      let diff = 0;
-      for (let i = 0; i < expected.length; i++) diff |= expected[i] ^ supplied[i];
-      if (diff !== 0) return null;
-    } else if (!crypto.subtle.timingSafeEqual(expected, supplied)) return null;
+    if (expected.length !== supplied.length) return null;
+    let diff = 0;
+    for (let i = 0; i < expected.length; i++) diff |= expected[i] ^ supplied[i];
+    if (diff !== 0) return null;
     const data = JSON.parse(new TextDecoder().decode(decodeB64url(payload))) as {
       sub?: string; exp?: number; iss?: string;
     };
@@ -109,10 +106,10 @@ export async function handleAuth(request: Request, env: Env): Promise<Response |
     if (user.login !== env.OWNER_GITHUB_LOGIN)
       return new Response("This GitHub identity is not authorized.", { status: 403 });
     const session = await issueSession(env, user.login);
-    return new Response(null, { status: 302, headers: {
-      Location: "/", "Set-Cookie": setCookie(COOKIE, session, SESSION_SECONDS) + ", " +
-        setCookie(STATE_COOKIE, "", 0), "Cache-Control": "no-store"
-    }});
+    const headers = new Headers({ Location: "/", "Cache-Control": "no-store" });
+    headers.append("Set-Cookie", setCookie(COOKIE, session, SESSION_SECONDS));
+    headers.append("Set-Cookie", setCookie(STATE_COOKIE, "", 0));
+    return new Response(null, { status: 302, headers });
   }
   if (url.pathname === "/auth/logout" && request.method === "POST") {
     return new Response(null, { status: 303, headers: {
