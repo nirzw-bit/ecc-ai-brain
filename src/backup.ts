@@ -23,7 +23,7 @@ export async function createBackup(env: Env, now = new Date()): Promise<{
     tableHashes[table] = await sha256Hex(canonicalJson(data[table]));
   }
   const envelope = {
-    format: "ecc-orbit-backup-v1", schemaVersion: "0003",
+    format: "ecc-orbit-backup-v1", schemaVersion: "0005",
     createdAt: now.toISOString(), tables: data, counts, tableHashes
   };
   const bytes = new TextEncoder().encode(JSON.stringify(envelope));
@@ -33,7 +33,7 @@ export async function createBackup(env: Env, now = new Date()): Promise<{
   const objectKey = "ecc-orbit/v1/" + stamp + "-" + sha256.slice(0, 16) + ".json";
   await env.BACKUPS.put(objectKey, bytes, {
     httpMetadata: { contentType: "application/json" },
-    customMetadata: { sha256, schemaVersion: "0003" }
+    customMetadata: { sha256, schemaVersion: "0005" }
   });
   const stored = await env.BACKUPS.get(objectKey);
   if (!stored) throw new Error("backup_readback_missing");
@@ -43,61 +43,8 @@ export async function createBackup(env: Env, now = new Date()): Promise<{
     throw new Error("backup_readback_checksum_mismatch");
   await env.DB.prepare(
     "INSERT INTO backup_manifests (id,object_key,schema_version,sha256,byte_length,counts_json,created_at,verified_at) VALUES (?,?,?,?,?,?,?,?)"
-  ).bind(crypto.randomUUID(), objectKey, "0003", sha256, bytes.byteLength,
+  ).bind(crypto.randomUUID(), objectKey, "0005", sha256, bytes.byteLength,
     JSON.stringify({ counts, tableHashes }), now.toISOString(), new Date().toISOString()).run();
   return { objectKey, sha256, byteLength: bytes.byteLength, counts, tableHashes };
 }
 
-export async function restoreBackupToTestDatabase(env: Env, objectKey: string, expectedSha256: string) {
-  const target = env.RESTORE_TEST_DB;
-  if (!target) throw new Error("restore_test_database_not_configured");
-  if (!objectKey.startsWith("ecc-orbit/v1/")) throw new Error("invalid_backup_object_key");
-  const manifest = await env.DB.prepare(
-    "SELECT sha256 FROM backup_manifests WHERE object_key=?"
-  ).bind(objectKey).first<{ sha256: string }>();
-  if (!manifest || manifest.sha256 !== expectedSha256) throw new Error("backup_manifest_mismatch");
-  const object = await env.BACKUPS.get(objectKey);
-  if (!object) throw new Error("backup_object_missing");
-  const bytes = await object.arrayBuffer();
-  if (await sha256Hex(bytes) !== expectedSha256) throw new Error("backup_checksum_mismatch");
-  const envelope = JSON.parse(new TextDecoder().decode(bytes)) as {
-    format: string; schemaVersion: string; tables: Record<string, Record<string, unknown>[]>;
-    counts: Record<string, number>; tableHashes: Record<string, string>;
-  };
-  if (envelope.format !== "ecc-orbit-backup-v1" || envelope.schemaVersion !== "0003")
-    throw new Error("backup_schema_version_unsupported");
-  for (const table of BACKUP_TABLES) {
-    const rows = envelope.tables[table];
-    if (!Array.isArray(rows) || rows.length !== envelope.counts[table])
-      throw new Error("backup_record_count_mismatch:" + table);
-    if (await sha256Hex(canonicalJson(rows)) !== envelope.tableHashes[table])
-      throw new Error("backup_table_checksum_mismatch:" + table);
-    const existing = await target.prepare("SELECT COUNT(*) AS n FROM " + table).first<{ n: number }>();
-    if ((existing?.n ?? 0) !== 0) throw new Error("restore_target_not_empty:" + table);
-  }
-  let batch: D1PreparedStatement[] = [];
-  for (const table of BACKUP_TABLES) {
-    for (const row of envelope.tables[table]) {
-      const columns = Object.keys(row);
-      if (!columns.length) continue;
-      const sql = "INSERT INTO " + table + " (" + columns.join(",") + ") VALUES (" +
-        columns.map(() => "?").join(",") + ")";
-      const values = columns.map(column => row[column] as string | number | null);
-      batch.push(target.prepare(sql).bind(...values));
-      if (batch.length === 25) {
-        await target.batch(batch);
-        batch = [];
-      }
-    }
-  }
-  if (batch.length) await target.batch(batch);
-  const restored: Record<string, number> = {};
-  for (const table of BACKUP_TABLES) {
-    const rows = await target.prepare("SELECT * FROM " + table + " ORDER BY rowid").all();
-    restored[table] = rows.results.length;
-    if (restored[table] !== envelope.counts[table] ||
-        await sha256Hex(canonicalJson(rows.results)) !== envelope.tableHashes[table])
-      throw new Error("restore_verification_failed:" + table);
-  }
-  return { ok: true, objectKey, sha256: expectedSha256, restored };
-}
