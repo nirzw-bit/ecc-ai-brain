@@ -22,6 +22,10 @@ export async function dispatchDueTasks(env: Env, now = new Date()): Promise<numb
     const leaseUntil = new Date(now.getTime() + LEASE_SECONDS * 1000).toISOString();
     const attempt = due.attempts + 1;
     const idempotencyKey = due.task_key + ":" + due.due_at + ":" + attempt;
+    const expiredRunCleanup = env.DB.prepare(
+      "UPDATE operational_runs SET status='retryable_failure',finished_at=?,result_json=? " +
+      "WHERE task_id=? AND status='running' AND started_at<=?"
+    ).bind(nowIso, JSON.stringify({ error: "lease_expired_reclaimed" }), due.id, due.lease_until ?? nowIso);
     const claim = env.DB.prepare(
       "UPDATE operational_tasks SET status='leased', lease_owner=?, lease_until=?, attempts=attempts+1 " +
       "WHERE id=? AND attempts=? AND attempts<max_attempts AND " +
@@ -32,8 +36,8 @@ export async function dispatchDueTasks(env: Env, now = new Date()): Promise<numb
       "SELECT ?,id,?,'running',?,? FROM operational_tasks " +
       "WHERE id=? AND status='leased' AND lease_owner=?"
     ).bind(crypto.randomUUID(), idempotencyKey, attempt, nowIso, due.id, leaseOwner);
-    const results = await env.DB.batch([claim, run]);
-    if (!results[0]?.meta?.changes || !results[1]?.meta?.changes) continue;
+    const results = await env.DB.batch([expiredRunCleanup, claim, run]);
+    if (!results[1]?.meta?.changes || !results[2]?.meta?.changes) continue;
     processed++;
     try {
       if (due.task_type === "backup") {
