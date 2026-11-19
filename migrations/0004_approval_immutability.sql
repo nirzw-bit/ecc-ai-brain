@@ -14,6 +14,7 @@ WHEN NEW.id != OLD.id
   OR NEW.expires_at != OLD.expires_at
   OR NEW.nonce != OLD.nonce
   OR NEW.created_at != OLD.created_at
+  OR (NEW.approver_id IS NOT OLD.approver_id AND NOT (OLD.status='pending' AND NEW.status='approved'))
   OR (NEW.status='approved' AND (NEW.approver_id IS NULL OR NEW.approver_id=NEW.requester_id))
 BEGIN SELECT RAISE(ABORT, 'approval_binding_immutable_or_invalid_approver'); END;
 
