@@ -30,11 +30,11 @@ async function hmac(keyText: string, message: string): Promise<Uint8Array> {
     { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)));
 }
-async function issueSession(env: Env, login: string): Promise<string> {
+async function issueSession(env: Env, login: string, subject: string): Promise<string> {
   if (!env.SESSION_HMAC_KEY || env.SESSION_HMAC_KEY.length < 32) throw new Error("session_signing_key_not_configured");
   const now = Math.floor(Date.now() / 1000);
   const payload = b64url(new TextEncoder().encode(JSON.stringify({
-    sub: login, iat: now, exp: now + SESSION_SECONDS, iss: "ecc-orbit"
+    sub: subject, login, iat: now, exp: now + SESSION_SECONDS, iss: "ecc-orbit"
   })));
   return payload + "." + b64url(await hmac(env.SESSION_HMAC_KEY, payload));
 }
@@ -53,11 +53,11 @@ export async function requireOwner(request: Request, env: Env): Promise<{ login:
     for (let i = 0; i < expected.length; i++) diff |= expected[i] ^ supplied[i];
     if (diff !== 0) return null;
     const data = JSON.parse(new TextDecoder().decode(decodeB64url(payload))) as {
-      sub?: string; exp?: number; iss?: string;
+      sub?: string; login?: string; exp?: number; iss?: string;
     };
-    if (data.iss !== "ecc-orbit" || data.sub !== env.OWNER_GITHUB_LOGIN ||
+    if (data.iss !== "ecc-orbit" || data.login !== env.OWNER_GITHUB_LOGIN || !data.sub ||
         !data.exp || data.exp <= Math.floor(Date.now() / 1000)) return null;
-    return { login: data.sub };
+    return { login: data.login };
   } catch { return null; }
 }
 
@@ -102,10 +102,20 @@ export async function handleAuth(request: Request, env: Env): Promise<Response |
         "User-Agent": "ECC-OrBIt" }
     });
     if (!userResponse.ok) return new Response("GitHub identity verification failed.", { status: 502 });
-    const user = await userResponse.json() as { login?: string };
-    if (user.login !== env.OWNER_GITHUB_LOGIN)
+    const user = await userResponse.json() as { login?: string; id?: number };
+    if (user.login !== env.OWNER_GITHUB_LOGIN || !user.id)
       return new Response("This GitHub identity is not authorized.", { status: 403 });
-    const session = await issueSession(env, user.login);
+    const identityId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR IGNORE INTO owner_identity (id,issuer,subject,created_at) VALUES (?,?,?,?)")
+        .bind(identityId, "https://github.com", String(user.id), now),
+      env.DB.prepare("INSERT OR IGNORE INTO owner_roles (id,owner_id,role,granted_at) " +
+        "SELECT ?,id,'owner',? FROM owner_identity WHERE issuer=? AND subject=? " +
+        "AND NOT EXISTS (SELECT 1 FROM owner_roles WHERE owner_id=owner_identity.id AND role='owner' AND revoked_at IS NULL)")
+        .bind(crypto.randomUUID(), now, "https://github.com", String(user.id))
+    ]);
+    const session = await issueSession(env, user.login, String(user.id));
     const headers = new Headers({ Location: "/", "Cache-Control": "no-store" });
     headers.append("Set-Cookie", setCookie(COOKIE, session, SESSION_SECONDS));
     headers.append("Set-Cookie", setCookie(STATE_COOKIE, "", 0));
