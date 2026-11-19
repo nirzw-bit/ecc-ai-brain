@@ -18,7 +18,7 @@ Official references:
 ## Guardrails
 Free quotas are ceilings, not guaranteed service capacity. Exceeding D1 daily row read/write limits can cause queries to fail until the UTC reset. Application soft thresholds are intentionally lower than provider limits. The quota module currently defines conservative thresholds, but platform usage telemetry is not yet connected; therefore live quota compliance remains NOT VERIFIED.
 
-Worker CPU per invocation is tightly constrained. The dispatcher processes at most one task per tick, uses a 90-second lease, and caps retries at three. Backup export is capped at 1,000 rows per table and 2 MB per archive. A backup exceeding these limits fails closed and requires a reviewed, bounded export strategy rather than a plan upgrade.
+Worker CPU per invocation is tightly constrained. The dispatcher processes at most one task per tick, uses a 90-second lease, and caps retries at three. Backup export is capped at 250 rows per table and 512 KB per archive. A backup exceeding these limits fails closed and requires a reviewed, bounded export strategy rather than a plan upgrade.
 
 R2 in the same Cloudflare account is not independent against account suspension or account compromise. A second account/external provider is a future owner-approved resilience enhancement, not part of the $0 certification claim.
 
