@@ -1,8 +1,8 @@
 export interface Env {
   DB: D1Database;
   BACKUPS: R2Bucket;
-  OWNER_ISSUER?: string;
-  OWNER_AUDIENCE?: string;
-  OWNER_SUBJECT?: string;
-  APPROVAL_HMAC_KEY?: string;
+  GITHUB_OAUTH_CLIENT_ID?: string;
+  GITHUB_OAUTH_CLIENT_SECRET?: string;
+  OWNER_GITHUB_LOGIN?: string;
+  SESSION_HMAC_KEY?: string;
 }
