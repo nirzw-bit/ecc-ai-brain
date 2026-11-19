@@ -1,5 +1,3 @@
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE owner_identity (
   id TEXT PRIMARY KEY,
   issuer TEXT NOT NULL,
