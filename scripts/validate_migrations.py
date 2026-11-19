@@ -59,8 +59,7 @@ VALUES('a1','deploy','dev','dev','hash','100','2099-01-01T00:00:00Z','nonce-1','
 db.execute("UPDATE approval_requests SET status='approved',approver_id='200' WHERE id='a1'")
 for statement in [
     "UPDATE approval_requests SET status='consumed' WHERE id='a1'",
-    "UPDATE approval_requests SET approver_id='100' WHERE id='a1'",
-    "UPDATE approval_events SET event_type='tampered' WHERE id='none'"
+    "UPDATE approval_requests SET approver_id='100' WHERE id='a1'"
 ]:
     try:
         db.execute(statement)
@@ -71,11 +70,15 @@ for statement in [
             raise AssertionError(f"approval guard failed to reject: {statement}")
 
 db.execute("INSERT INTO approval_events VALUES('ae1','a1','approved','200','{}','2026-11-19T00:00:01Z')")
-try:
-    db.execute("DELETE FROM approval_events WHERE id='ae1'")
-except sqlite3.IntegrityError:
-    pass
-else:
-    raise AssertionError("approval event deletion was accepted")
+for statement in [
+    "UPDATE approval_events SET event_type='tampered' WHERE id='ae1'",
+    "DELETE FROM approval_events WHERE id='ae1'"
+]:
+    try:
+        db.execute(statement)
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise AssertionError(f"approval event immutability failed: {statement}")
 
 print(f"PASS: {len(expected)} required tables; {len(migrations)} migrations; append-only memory, sequential supersession, role uniqueness and approval lifecycle guards")
