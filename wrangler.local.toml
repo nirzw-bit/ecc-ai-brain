@@ -1,0 +1,16 @@
+name = "ecc-orbit-local-test"
+main = "src/index.ts"
+compatibility_date = "2026-11-19"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ecc-orbit-local-test"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "ecc-orbit-local-test"
+
+[triggers]
+crons = []
