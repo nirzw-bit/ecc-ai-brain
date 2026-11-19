@@ -9,7 +9,7 @@ export interface MemoryInput {
   memoryKey: string;
   content: string;
   provenance: unknown;
-  status: "proposed" | "verified";
+  status?: "proposed";
   evidence?: MemoryEvidenceInput[];
 }
 export async function buildMemoryVersion(memoryId: string, input: MemoryInput, version: number, createdAt: string) {
@@ -18,7 +18,7 @@ export async function buildMemoryVersion(memoryId: string, input: MemoryInput, v
   return {
     id: crypto.randomUUID(), memoryId, memoryKey: input.memoryKey, version,
     content: input.content, contentSha256: await sha256Hex(input.content),
-    status: input.status, supersedesVersion: version > 1 ? version - 1 : null,
+    status: "proposed", supersedesVersion: version > 1 ? version - 1 : null,
     provenanceJson, createdAt
   };
 }
