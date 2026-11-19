@@ -1,5 +1,5 @@
 import type { Env } from "./types";
-import { createBackup, restoreBackupToTestDatabase } from "./backup";
+import { createBackup } from "./backup";
 
 const MAX_TASKS_PER_TICK = 1;
 const LEASE_SECONDS = 90;
@@ -53,10 +53,6 @@ export async function dispatchDueTasks(env: Env, now = new Date()): Promise<numb
     try {
       if (due.task_type === "backup") {
         await createBackup(env, now);
-      } else if (due.task_type === "restore_test") {
-        const payload = JSON.parse(due.payload_json) as { objectKey?: string; sha256?: string };
-        if (!payload.objectKey || !payload.sha256) throw new Error("restore_payload_invalid");
-        await restoreBackupToTestDatabase(env, payload.objectKey, payload.sha256);
       } else if (due.task_type === "heartbeat") {
         await env.DB.prepare(
           "INSERT INTO system_events (id,event_type,severity,detail_json,created_at) VALUES (?,?,?,?,?)"
