@@ -1,6 +1,7 @@
 import type { Env } from "./types";
 import { handleAuth, requireOwner } from "./auth";
 import { dispatchDueTasks } from "./scheduler";
+import { appendMemoryVersion } from "./memory";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
   status, headers: {
@@ -14,23 +15,44 @@ const page = () => new Response(`<!doctype html>
 <style>
 :root{font-family:system-ui,sans-serif;color-scheme:dark;background:#10151c;color:#e8eef5}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:1rem}
-main{width:min(100%,34rem);border:1px solid #344252;border-radius:1rem;padding:clamp(1.2rem,5vw,2rem);background:#18212b}
+main{width:min(100%,42rem);border:1px solid #344252;border-radius:1rem;padding:clamp(1.2rem,5vw,2rem);background:#18212b}
 h1{margin:.2rem 0 .6rem;font-size:clamp(1.7rem,6vw,2.2rem)}p{line-height:1.55;color:#bdc9d6}
 button{width:100%;padding:.9rem 1rem;border:0;border-radius:.65rem;background:#d7e7f7;color:#101820;font-weight:700;font-size:1rem}
-small{display:block;margin-top:1rem;color:#9cabb9}#status{margin-top:1rem;overflow-wrap:anywhere}
+input,textarea{width:100%;margin:.35rem 0 1rem;padding:.8rem;border:1px solid #526477;border-radius:.5rem;background:#0f1720;color:#fff;font:inherit}
+label{display:block;font-weight:600;margin-top:.8rem}textarea{min-height:8rem;resize:vertical}
+small{display:block;margin-top:1rem;color:#9cabb9}#status,#result{margin-top:1rem;overflow-wrap:anywhere}
+#memory{border-top:1px solid #344252;margin-top:1.5rem;padding-top:1rem}
 </style></head><body><main><h1>ECC OrBIt</h1>
-<p>Private owner console. Sign in with the authorized GitHub account to verify the development identity.</p>
-<a href="/auth/github/start"><button type="button">Continue with GitHub</button></a>
+<p>Private owner console. Memory entries are append-only and versioned. Corrections create a new version; existing evidence is retained.</p>
+<a href="/auth/github/start" id="login"><button type="button">Continue with GitHub</button></a>
 <p id="status" role="status">Checking session…</p>
+<section id="memory" hidden>
+<h2>Capture a memory</h2>
+<form id="memoryForm">
+<label for="key">Memory key</label><input id="key" maxlength="120" required placeholder="ecc.project.decision">
+<label for="body">Memory content</label><textarea id="body" maxlength="32000" required placeholder="Record a fact, decision or lesson…"></textarea>
+<label for="source">Evidence / source reference</label><input id="source" maxlength="500" placeholder="Chat, file name, URL or observation">
+<button type="submit">Append memory version</button>
+</form><p id="result" role="status"></p>
+</section>
 <form id="logout" action="/auth/logout" method="post" hidden><button type="submit">Sign out</button></form>
 <small>Development environment · owner-only · no production connection</small>
 </main><script>
-(async()=>{const s=document.getElementById("status"),f=document.getElementById("logout");
+(async()=>{const s=document.getElementById("status"),f=document.getElementById("logout"),m=document.getElementById("memory"),l=document.getElementById("login");
 try{const r=await fetch("/api/me",{credentials:"same-origin",cache:"no-store"});
-if(r.ok){const d=await r.json();s.textContent="Authenticated as "+d.login;f.hidden=false;}
+if(r.ok){const d=await r.json();s.textContent="Authenticated as "+d.login;m.hidden=false;f.hidden=false;l.hidden=true;}
 else{s.textContent="Not signed in. Privileged functions remain locked.";}
 }catch(_){s.textContent="Session status unavailable.";}
 })();
+document.getElementById("memoryForm").addEventListener("submit",async e=>{
+e.preventDefault();const out=document.getElementById("result");out.textContent="Saving…";
+try{const r=await fetch("/api/memory",{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify({
+memoryKey:document.getElementById("key").value,content:document.getElementById("body").value,
+provenance:{capture:"owner-console"},evidence:document.getElementById("source").value?[{evidenceType:"source_reference",sourceRef:document.getElementById("source").value}]:[]
+})});
+const d=await r.json();out.textContent=r.ok?"Saved version "+d.version+" · SHA-256 "+d.contentSha256:d.error||"Save failed";
+}catch(_){out.textContent="Save failed. No success was reported.";}
+});
 </script></body></html>`, { headers: {
   "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
   "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
@@ -44,9 +66,48 @@ export default {
     if (url.pathname === "/" && request.method === "GET") return page();
     if (url.pathname === "/health" && request.method === "GET")
       return json({ ok: true, service: "ecc-orbit", mode: "development" });
-    if (url.pathname === "/api/me" && request.method === "GET") {
+    if (url.pathname.startsWith("/api/")) {
       const owner = await requireOwner(request, env);
-      return owner ? json({ authenticated: true, login: owner.login }) : json({ error: "unauthorized" }, 401);
+      if (!owner) return json({ error: "unauthorized" }, 401);
+      if (url.pathname === "/api/me" && request.method === "GET")
+        return json({ authenticated: true, login: owner.login });
+      if (url.pathname === "/api/memory" && request.method === "POST") {
+        const length = Number(request.headers.get("content-length") ?? "0");
+        if (length > 64_000) return json({ error: "request_too_large" }, 413);
+        if (!request.headers.get("content-type")?.includes("application/json"))
+          return json({ error: "application_json_required" }, 415);
+        try {
+          const body = await request.json() as {
+            memoryKey?: string; content?: string; provenance?: unknown;
+            evidence?: { evidenceType: string; sourceRef: string; excerptSha256?: string }[];
+          };
+          if (typeof body.memoryKey !== "string" || typeof body.content !== "string" ||
+              body.provenance === undefined || (body.evidence !== undefined && !Array.isArray(body.evidence)))
+            return json({ error: "invalid_memory_payload" }, 400);
+          const version = await appendMemoryVersion(env.DB, {
+            memoryKey: body.memoryKey, content: body.content, provenance: body.provenance,
+            status: "proposed", evidence: body.evidence
+          });
+          return json({ ok: true, version: version.version, memoryId: version.memoryId,
+            contentSha256: version.contentSha256, status: "proposed" }, 201);
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "memory_write_failed" }, 400);
+        }
+      }
+      if (url.pathname === "/api/memory" && request.method === "GET") {
+        const key = url.searchParams.get("key");
+        if (!key) return json({ error: "memory_key_required" }, 400);
+        const record = await env.DB.prepare(
+          "SELECT id,memory_key,current_version,created_at FROM memory_records WHERE memory_key=?"
+        ).bind(key).first();
+        if (!record) return json({ error: "not_found" }, 404);
+        const versions = await env.DB.prepare(
+          "SELECT id,version,content,content_sha256,status,supersedes_version,provenance_json,created_at " +
+          "FROM memory_versions WHERE memory_id=? ORDER BY version DESC LIMIT 50"
+        ).bind(record.id).all();
+        return json({ record, versions: versions.results });
+      }
+      return json({ error: "not_found" }, 404);
     }
     return json({ error: "not_found" }, 404);
   },
