@@ -72,18 +72,26 @@ export default {
       if (url.pathname === "/api/me" && request.method === "GET")
         return json({ authenticated: true, login: owner.login });
       if (url.pathname === "/api/memory" && request.method === "POST") {
-        const length = Number(request.headers.get("content-length") ?? "0");
-        if (length > 64_000) return json({ error: "request_too_large" }, 413);
         if (!request.headers.get("content-type")?.includes("application/json"))
           return json({ error: "application_json_required" }, 415);
         try {
-          const body = await request.json() as {
+          const raw = await request.text();
+          if (raw.length > 64_000) return json({ error: "request_too_large" }, 413);
+          const body = JSON.parse(raw) as {
             memoryKey?: string; content?: string; provenance?: unknown;
             evidence?: { evidenceType: string; sourceRef: string; excerptSha256?: string }[];
           };
-          if (typeof body.memoryKey !== "string" || typeof body.content !== "string" ||
-              body.provenance === undefined || (body.evidence !== undefined && !Array.isArray(body.evidence)))
+          if (typeof body.memoryKey !== "string" || body.memoryKey.length > 120 ||
+              typeof body.content !== "string" || !body.content.length || body.content.length > 32000 ||
+              body.provenance === undefined || (body.evidence !== undefined && !Array.isArray(body.evidence)) ||
+              (body.evidence ?? []).length > 20)
             return json({ error: "invalid_memory_payload" }, 400);
+          for (const evidence of body.evidence ?? []) {
+            if (!evidence || typeof evidence.evidenceType !== "string" || evidence.evidenceType.length > 80 ||
+                typeof evidence.sourceRef !== "string" || !evidence.sourceRef.length || evidence.sourceRef.length > 500 ||
+                (evidence.excerptSha256 !== undefined && !/^[a-f0-9]{64}$/i.test(evidence.excerptSha256)))
+              return json({ error: "invalid_evidence_payload" }, 400);
+          }
           const version = await appendMemoryVersion(env.DB, {
             memoryKey: body.memoryKey, content: body.content, provenance: body.provenance,
             status: "proposed", evidence: body.evidence
