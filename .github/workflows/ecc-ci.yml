@@ -21,5 +21,11 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm test
+      - name: Apply migrations to isolated local D1
+        run: npx wrangler d1 migrations apply ecc-orbit-local-test --local --config wrangler.local.toml
+      - name: Local Worker authorization smoke test
+        run: node scripts/local-smoke.mjs
+      - name: Check restore tool syntax
+        run: node --check scripts/restore-backup.mjs
       - name: Validate ordered D1 migrations and append-only invariants
         run: python3 scripts/validate_migrations.py
