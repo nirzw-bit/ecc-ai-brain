@@ -1,0 +1,19 @@
+name = "ecc-orbit-dev"
+main = "src/index.ts"
+compatibility_date = "2026-11-19"
+workers_dev = true
+
+# IDs are deliberately placeholders until owner provisioning is confirmed.
+[[d1_databases]]
+binding = "DB"
+database_name = "ecc-orbit-dev"
+database_id = "REPLACE_AFTER_OWNER_PROVISIONING"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "ecc-orbit-backups-dev"
+
+[triggers]
+# Exactly one Cron Trigger, intentionally disabled until provisioning.
+crons = []
