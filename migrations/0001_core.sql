@@ -18,7 +18,7 @@ CREATE TABLE memory_records (
   id TEXT PRIMARY KEY,
   memory_key TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL,
-  current_version INTEGER NOT NULL CHECK(current_version >= 1)
+  current_version INTEGER NOT NULL DEFAULT 0 CHECK(current_version >= 0)
 );
 CREATE TABLE memory_versions (
   id TEXT PRIMARY KEY,
