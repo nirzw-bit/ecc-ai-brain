@@ -20,7 +20,7 @@ const suppliedSha = args.sha256?.toLowerCase();
 const bucket = "ecc-orbit-backups-dev";
 const database = "ecc-orbit-restore-test";
 const sourceDatabase = "ecc-orbit-dev";
-if (!/^ecc-orbit\/v1\/[a-zA-Z0-9._-]+\\.json$/.test(key ?? "") ||
+if (!/^ecc-orbit\/v1\/[a-zA-Z0-9._-]+\.json$/.test(key ?? "") ||
     (suppliedSha !== undefined && !/^[a-f0-9]{64}$/.test(suppliedSha))) {
   console.error("Usage: node scripts/restore-backup.mjs --key ecc-orbit/v1/<file>.json [--sha256 <optional-64-hex-check>]");
   process.exit(2);
