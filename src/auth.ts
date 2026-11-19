@@ -135,9 +135,9 @@ export async function handleAuth(request: Request, env: Env): Promise<Response |
       env.DB.prepare("INSERT OR IGNORE INTO owner_identity (id,issuer,subject,created_at) VALUES (?,?,?,?)")
         .bind(crypto.randomUUID(), "https://github.com", String(user.id), now),
       env.DB.prepare("INSERT OR IGNORE INTO owner_roles (id,owner_id,role,granted_at) " +
-        "SELECT ?,id,?,?,? FROM owner_identity WHERE issuer=? AND subject=? " +
+        "SELECT ?,id,?,? FROM owner_identity WHERE issuer=? AND subject=? " +
         "AND NOT EXISTS (SELECT 1 FROM owner_roles WHERE owner_id=owner_identity.id AND role=? AND revoked_at IS NULL)")
-        .bind(crypto.randomUUID(), role, now, now, "https://github.com", String(user.id), role)
+        .bind(crypto.randomUUID(), role, now, "https://github.com", String(user.id), role)
     ]);
     const session = await issueSession(env, user.login, String(user.id));
     const headers = new Headers({ Location: "/", "Cache-Control": "no-store" });
