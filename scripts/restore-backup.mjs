@@ -19,8 +19,9 @@ const key = args.key;
 const expectedSha = args.sha256?.toLowerCase();
 const bucket = args.bucket ?? "ecc-orbit-backups-dev";
 const database = args.database ?? "ecc-orbit-restore-test";
-if (!key?.startsWith("ecc-orbit/v1/") || !/^[a-f0-9]{64}$/.test(expectedSha ?? "")) {
-  console.error("Usage: node scripts/restore-backup.mjs --key ecc-orbit/v1/<file>.json --sha256 <64-hex> [--bucket ecc-orbit-backups-dev] [--database ecc-orbit-restore-test]");
+const sourceDatabase = args["source-database"] ?? "ecc-orbit-dev";
+if (!/^ecc-orbit\/v1\/[a-zA-Z0-9._-]+\.json$/.test(key ?? "") || !/^[a-f0-9]{64}$/.test(expectedSha ?? "")) {
+  console.error("Usage: node scripts/restore-backup.mjs --key ecc-orbit/v1/<file>.json --sha256 <64-hex> [--bucket ecc-orbit-backups-dev] [--database ecc-orbit-restore-test] [--source-database ecc-orbit-dev]");
   process.exit(2);
 }
 const run = (argv) => execFileSync("npx", ["wrangler", ...argv], {
@@ -48,6 +49,11 @@ const temp = mkdtempSync(join(tmpdir(), "ecc-orbit-restore-"));
 try {
   const backupPath = join(temp, "backup.json");
   const sqlPath = join(temp, "restore.sql");
+  const manifestOutput = parseJsonOutput(run(["d1","execute",sourceDatabase,"--remote","--json","--command",
+    "SELECT sha256 FROM backup_manifests WHERE object_key=" + "'" + key.replace(/'/g, "''") + "' LIMIT 1"]));
+  const manifestRows = manifestOutput.flatMap(x => x.results ?? []);
+  if (manifestRows.length !== 1 || String(manifestRows[0].sha256).toLowerCase() !== expectedSha)
+    throw new Error("source D1 backup manifest does not match supplied key/SHA-256");
   run(["r2", "object", "get", bucket + "/" + key, "--file", backupPath, "--remote"]);
   const raw = readFileSync(backupPath);
   const actualSha = hash(raw);
