@@ -67,7 +67,7 @@ export default {
     if (url.pathname === "/" && request.method === "GET") return page();
     if (url.pathname === "/health" && request.method === "GET")
       return json({ ok: true, service: "ecc-orbit", mode: "development" });
-    const approvalRoute = url.pathname.match(/^\\/api\\/approvals\\/([a-f0-9-]+)\\/(approve|consume)$/i);
+    const approvalRoute = url.pathname.match(/^\/api\/approvals\/([a-f0-9-]+)\/(approve|consume)$/i);
     if (approvalRoute && request.method === "POST") {
       const reviewer = await requireReviewer(request, env);
       if (!reviewer) return json({ error: "unauthorized_reviewer" }, 401);
