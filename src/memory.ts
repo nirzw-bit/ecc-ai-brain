@@ -29,7 +29,9 @@ export async function buildMemoryVersion(memoryId: string, input: MemoryInput, v
  * (memory_id, version) unique constraint and must re-read/retry.
  */
 export async function appendMemoryVersion(db: D1Database, input: MemoryInput, now = new Date()) {
-  if (!input.memoryKey.trim()) throw new Error("memory_key_required");
+  if (!input.memoryKey.trim() || input.memoryKey.length > 120) throw new Error("memory_key_invalid");
+  if (!input.content || input.content.length > 32000) throw new Error("memory_content_invalid");
+  if ((input.evidence?.length ?? 0) > 20) throw new Error("too_many_evidence_items");
   const createdAt = now.toISOString();
   let record = await db.prepare(
     "SELECT id,current_version FROM memory_records WHERE memory_key=?"
