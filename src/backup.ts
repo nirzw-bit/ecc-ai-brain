@@ -16,7 +16,8 @@ export async function createBackup(env: Env, now = new Date()): Promise<{
   const counts: Record<string, number> = {};
   const tableHashes: Record<string, string> = {};
   for (const table of BACKUP_TABLES) {
-    const result = await env.DB.prepare("SELECT * FROM " + table + " ORDER BY rowid").all();
+    const result = await env.DB.prepare("SELECT * FROM " + table + " ORDER BY rowid LIMIT 1001").all();
+    if (result.results.length > 1000) throw new Error("backup_row_soft_limit_exceeded:" + table);
     data[table] = result.results as unknown[];
     counts[table] = result.results.length;
     tableHashes[table] = await sha256Hex(canonicalJson(data[table]));
@@ -74,6 +75,7 @@ export async function restoreBackupToTestDatabase(env: Env, objectKey: string, e
     const existing = await target.prepare("SELECT COUNT(*) AS n FROM " + table).first<{ n: number }>();
     if ((existing?.n ?? 0) !== 0) throw new Error("restore_target_not_empty:" + table);
   }
+  let batch: D1PreparedStatement[] = [];
   for (const table of BACKUP_TABLES) {
     for (const row of envelope.tables[table]) {
       const columns = Object.keys(row);
@@ -81,9 +83,14 @@ export async function restoreBackupToTestDatabase(env: Env, objectKey: string, e
       const sql = "INSERT INTO " + table + " (" + columns.join(",") + ") VALUES (" +
         columns.map(() => "?").join(",") + ")";
       const values = columns.map(column => row[column] as string | number | null);
-      await target.prepare(sql).bind(...values).run();
+      batch.push(target.prepare(sql).bind(...values));
+      if (batch.length === 25) {
+        await target.batch(batch);
+        batch = [];
+      }
     }
   }
+  if (batch.length) await target.batch(batch);
   const restored: Record<string, number> = {};
   for (const table of BACKUP_TABLES) {
     const rows = await target.prepare("SELECT * FROM " + table + " ORDER BY rowid").all();
