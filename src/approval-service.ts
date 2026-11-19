@@ -5,6 +5,7 @@ export interface ApprovalAction {
 }
 export async function requestApproval(db: D1Database, requesterId: string, action: ApprovalAction,
   expiresAt: string, now = new Date()) {
+  if (!await activeRole(db, requesterId, "owner")) throw new Error("active_owner_role_required");
   if (Date.parse(expiresAt) <= now.getTime()) throw new Error("approval_expiry_must_be_future");
   const id = crypto.randomUUID();
   const nonce = crypto.randomUUID();
@@ -22,16 +23,16 @@ export async function requestApproval(db: D1Database, requesterId: string, actio
   return { id, nonce, payloadSha256, status: "pending" as const };
 }
 
-async function activeReviewer(db: D1Database, actorId: string): Promise<boolean> {
+async function activeRole(db: D1Database, actorId: string, role: "owner" | "reviewer"): Promise<boolean> {
   const row = await db.prepare(
     "SELECT 1 AS ok FROM owner_roles r JOIN owner_identity i ON i.id=r.owner_id " +
-    "WHERE i.subject=? AND r.role='reviewer' AND r.revoked_at IS NULL LIMIT 1"
-  ).bind(actorId).first<{ ok: number }>();
+    "WHERE i.issuer='https://github.com' AND i.subject=? AND r.role=? AND r.revoked_at IS NULL LIMIT 1"
+  ).bind(actorId, role).first<{ ok: number }>();
   return !!row;
 }
 
 export async function approveRequest(db: D1Database, approvalId: string, reviewerId: string, now = new Date()) {
-  if (!await activeReviewer(db, reviewerId)) throw new Error("active_reviewer_role_required");
+  if (!await activeRole(db, reviewerId, "reviewer")) throw new Error("active_reviewer_role_required");
   const request = await db.prepare(
     "SELECT requester_id,status,expires_at FROM approval_requests WHERE id=?"
   ).bind(approvalId).first<{ requester_id: string; status: string; expires_at: string }>();
@@ -51,7 +52,7 @@ export async function approveRequest(db: D1Database, approvalId: string, reviewe
 
 export async function consumeApproval(db: D1Database, approvalId: string, actorId: string,
   action: ApprovalAction, now = new Date()) {
-  if (!await activeReviewer(db, actorId)) throw new Error("active_reviewer_role_required");
+  if (!await activeRole(db, actorId, "reviewer")) throw new Error("active_reviewer_role_required");
   const row = await db.prepare("SELECT * FROM approval_requests WHERE id=?")
     .bind(approvalId).first<{
       action_type: string; target: string; scope: string; payload_sha256: string;
