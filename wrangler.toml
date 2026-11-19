@@ -10,10 +10,16 @@ database_name = "ecc-orbit-dev"
 database_id = "REPLACE_AFTER_OWNER_PROVISIONING"
 migrations_dir = "migrations"
 
+[[d1_databases]]
+binding = "RESTORE_TEST_DB"
+database_name = "ecc-orbit-restore-test"
+database_id = "REPLACE_AFTER_OWNER_PROVISIONING"
+migrations_dir = "migrations"
+
 [[r2_buckets]]
 binding = "BACKUPS"
 bucket_name = "ecc-orbit-backups-dev"
 
 [triggers]
-# Exactly one Cron Trigger, intentionally disabled until provisioning.
-crons = []
+# Exactly one Cron Trigger; enabled only when this branch is deployed.
+crons = ["0 * * * *"]
