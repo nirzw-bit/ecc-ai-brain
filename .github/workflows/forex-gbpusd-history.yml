@@ -40,41 +40,38 @@ jobs:
         run: |
           mkdir -p data reports
           date -u +"%Y-%m-%dT%H:%M:%SZ" > reports/runner-started-at-utc.txt
-          node --version
-          python --version
-      - name: Download GBPUSD H1/H4 bid and ask history
+      - name: Attempt Dukascopy H1/H4 bid and ask
+        id: dukascopy
         shell: bash
         run: |
           set -euo pipefail
-          FROM="2003-05-04"
-          npx --yes dukascopy-node@1.51.1 -i gbpusd -from "$FROM" -to now -t h1 -p bid -f csv -dir data -fn gbpusd-h1-bid --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache
-          npx --yes dukascopy-node@1.51.1 -i gbpusd -from "$FROM" -to now -t h1 -p ask -f csv -dir data -fn gbpusd-h1-ask --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache
-          npx --yes dukascopy-node@1.51.1 -i gbpusd -from "$FROM" -to now -t h4 -p bid -f csv -dir data -fn gbpusd-h4-bid --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache
-          npx --yes dukascopy-node@1.51.1 -i gbpusd -from "$FROM" -to now -t h4 -p ask -f csv -dir data -fn gbpusd-h4-ask --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache
-          find data -maxdepth 1 -type f -name '*.csv' -printf '%f %s bytes\n' | sort
-          test "$(find data -maxdepth 1 -type f -name '*.csv' | wc -l)" -eq 4
-      - name: Validate OHLC, timestamps, gaps and Wilder ATR(14)
+          download_all() {
+            npx --yes dukascopy-node@1.51.1 -i gbpusd -from 2003-05-04 -to now -t h1 -p bid -f csv -dir data -fn gbpusd-h1-bid --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache || return 1
+            npx --yes dukascopy-node@1.51.1 -i gbpusd -from 2003-05-04 -to now -t h1 -p ask -f csv -dir data -fn gbpusd-h1-ask --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache || return 1
+            npx --yes dukascopy-node@1.51.1 -i gbpusd -from 2003-05-04 -to now -t h4 -p bid -f csv -dir data -fn gbpusd-h4-bid --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache || return 1
+            npx --yes dukascopy-node@1.51.1 -i gbpusd -from 2003-05-04 -to now -t h4 -p ask -f csv -dir data -fn gbpusd-h4-ask --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache || return 1
+          }
+          if download_all; then
+            echo "provider=dukascopy" >> "$GITHUB_OUTPUT"
+          else
+            echo "Dukascopy denied hosted-runner request or download failed; selecting documented free fallback."
+            rm -f data/gbpusd-h1-*.csv data/gbpusd-h4-*.csv
+            echo "provider=histdata" >> "$GITHUB_OUTPUT"
+          fi
+      - name: HistData M1 fallback and UTC H1/H4 aggregation
+        if: steps.dukascopy.outputs.provider == 'histdata'
+        run: |
+          python -m pip install --disable-pip-version-check histdata-fetcher==0.1.0
+          python scripts/forex/fetch_histdata_fallback.py
+      - name: Validate OHLC, duplicates, gaps and Wilder ATR(14)
         run: python scripts/forex/validate_gbpusd.py
       - name: Preserve provenance metadata
         if: always()
         run: |
-          cat > reports/provenance.json <<'JSON'
-          {
-            "instrument": "GBPUSD",
-            "provider": "Dukascopy public historical feed",
-            "client": "dukascopy-node",
-            "client_version": "1.51.1",
-            "price_types": ["bid", "ask"],
-            "timeframes": ["H1", "H4"],
-            "timezone": "UTC",
-            "requested_start": "2003-05-04",
-            "requested_end": "now",
-            "retrieval_method": "GitHub-hosted runner; public HTTPS data requests",
-            "broker_connection": false,
-            "trade_execution": false
-          }
-          JSON
           date -u +"%Y-%m-%dT%H:%M:%SZ" > reports/runner-finished-at-utc.txt
+          test -f reports/source-metadata.json || cat > reports/source-metadata.json <<'JSON'
+          {"provider":"Dukascopy public historical feed","client":"dukascopy-node 1.51.1","requested_start":"2003-05-04","requested_end":"now","timezone":"UTC","price_types":["bid","ask"],"timeframes":["H1","H4"],"broker_connection":false,"trade_execution":false}
+          JSON
       - name: Upload raw datasets and research report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
