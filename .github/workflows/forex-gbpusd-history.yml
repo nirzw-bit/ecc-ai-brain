@@ -1,0 +1,87 @@
+name: ECC GBPUSD historical acquisition
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 17 * * *"
+  push:
+    branches:
+      - feat/ecc-orbit-cloudflare-v1
+    paths:
+      - ".github/workflows/forex-gbpusd-history.yml"
+      - "scripts/forex/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ecc-gbpusd-history
+  cancel-in-progress: false
+
+jobs:
+  acquire-validate:
+    name: Download and validate GBPUSD H1/H4
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout isolated development branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: feat/ecc-orbit-cloudflare-v1
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Record acquisition start
+        run: |
+          mkdir -p data reports
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > reports/runner-started-at-utc.txt
+          node --version
+          python --version
+      - name: Download GBPUSD H1/H4 bid and ask history
+        shell: bash
+        run: |
+          set -euo pipefail
+          FROM="2003-05-04"
+          npx --yes dukascopy-node@1.51.1 -i gbpusd -from "$FROM" -to now -t h1 -p bid -f csv -dir data -fn gbpusd-h1-bid --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache
+          npx --yes dukascopy-node@1.51.1 -i gbpusd -from "$FROM" -to now -t h1 -p ask -f csv -dir data -fn gbpusd-h1-ask --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache
+          npx --yes dukascopy-node@1.51.1 -i gbpusd -from "$FROM" -to now -t h4 -p bid -f csv -dir data -fn gbpusd-h4-bid --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache
+          npx --yes dukascopy-node@1.51.1 -i gbpusd -from "$FROM" -to now -t h4 -p ask -f csv -dir data -fn gbpusd-h4-ask --batch-size 3 --batch-pause 1500 --retries 3 --rate-limit-retries 3 --cache
+          find data -maxdepth 1 -type f -name '*.csv' -printf '%f %s bytes\n' | sort
+          test "$(find data -maxdepth 1 -type f -name '*.csv' | wc -l)" -eq 4
+      - name: Validate OHLC, timestamps, gaps and Wilder ATR(14)
+        run: python scripts/forex/validate_gbpusd.py
+      - name: Preserve provenance metadata
+        if: always()
+        run: |
+          cat > reports/provenance.json <<'JSON'
+          {
+            "instrument": "GBPUSD",
+            "provider": "Dukascopy public historical feed",
+            "client": "dukascopy-node",
+            "client_version": "1.51.1",
+            "price_types": ["bid", "ask"],
+            "timeframes": ["H1", "H4"],
+            "timezone": "UTC",
+            "requested_start": "2003-05-04",
+            "requested_end": "now",
+            "retrieval_method": "GitHub-hosted runner; public HTTPS data requests",
+            "broker_connection": false,
+            "trade_execution": false
+          }
+          JSON
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > reports/runner-finished-at-utc.txt
+      - name: Upload raw datasets and research report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ecc-gbpusd-history-${{ github.run_id }}
+          path: |
+            data/
+            reports/
+          if-no-files-found: warn
+          retention-days: 30
