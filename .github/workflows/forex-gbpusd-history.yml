@@ -58,9 +58,9 @@ jobs:
             rm -f data/gbpusd-h1-*.csv data/gbpusd-h4-*.csv
             echo "provider=histdata" >> "$GITHUB_OUTPUT"
           fi
-      - name: HistData M1 fallback and UTC H1/H4 aggregation
-        if: steps.dukascopy.outputs.provider == 'histdata'
+      - name: Acquire mandatory HistData raw M1 and derive H1/H4 bid
         run: |
+          rm -f data/gbpusd-h1-ask.csv data/gbpusd-h4-ask.csv
           python -m pip install --disable-pip-version-check histdata-fetcher==0.1.0
           python scripts/forex/fetch_histdata_fallback.py
       - name: Run timestamp and malformed-data regression tests
@@ -74,7 +74,7 @@ jobs:
         run: |
           date -u +"%Y-%m-%dT%H:%M:%SZ" > reports/runner-finished-at-utc.txt
           test -f reports/source-metadata.json || cat > reports/source-metadata.json <<'JSON'
-          {"provider":"UNKNOWN","source_attempts":["Dukascopy public historical feed","HistData.com fallback"],"acquisition_status":"FAILED_OR_METADATA_MISSING","broker_connection":false,"trade_execution":false}
+          {"provider":"UNKNOWN","source_attempts":["Dukascopy public historical feed","HistData.com mandatory M1 reconciliation source"],"acquisition_status":"FAILED_OR_METADATA_MISSING","broker_connection":false,"trade_execution":false}
           JSON
       - name: Enforce source freshness and independent M1-to-H1/H4 reconciliation
         run: python scripts/forex/acceptance_gates.py
