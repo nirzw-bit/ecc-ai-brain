@@ -9,24 +9,24 @@ class FreshnessTests(unittest.TestCase):
         end=datetime(2026,1,7,12,tzinfo=timezone.utc); start=end-timedelta(minutes=2)
         last=end-timedelta(hours=age_hours+1)
         if future: last=end+timedelta(minutes=10)
-        return g.freshness(end,None if missing else start.isoformat(),end.isoformat(),requested,last.isoformat(),3600,[])
+        return g.freshness(None if missing else start.isoformat(),end.isoformat(),requested,last.isoformat(),3600,[])
     def test_current_dataset_passes(self): self.assertEqual(self.check(2)["status"],"PASS")
     def test_stale_thirteen_day_dataset_fails(self): self.assertEqual(self.check(13*24)["status"],"FAIL")
     def test_weekend_boundary_uses_weekend_grace(self):
         end=datetime(2026,1,10,12,tzinfo=timezone.utc); last=end-timedelta(hours=49)
-        r=g.freshness(end,end.isoformat(),end.isoformat(),"2026-01-09T00:00:00Z",last.isoformat(),3600,[])
+        r=g.freshness(end.isoformat(),end.isoformat(),"2026-01-09T00:00:00Z",last.isoformat(),3600,[])
         self.assertEqual(r["status"],"PASS")
     def test_declared_holiday_closure_uses_bounded_grace(self):
         end=datetime(2026,1,7,12,tzinfo=timezone.utc); last=end-timedelta(hours=97)
         closure=[{"start_utc":"2026-01-07T00:00:00Z","end_utc":"2026-01-08T00:00:00Z"}]
-        r=g.freshness(end,end.isoformat(),end.isoformat(),"2026-01-04T00:00:00Z",last.isoformat(),3600,closure)
+        r=g.freshness(end.isoformat(),end.isoformat(),"2026-01-04T00:00:00Z",last.isoformat(),3600,closure)
         self.assertEqual(r["status"],"PASS"); self.assertEqual(r["max_age_seconds"],120*3600)
     def test_future_candle_fails(self): self.assertEqual(self.check(0,future=True)["status"],"FAIL")
     def test_missing_acquisition_timestamp_fails(self): self.assertEqual(self.check(1,missing=True)["status"],"FAIL")
     def test_requested_end_after_acquisition_fails(self): self.assertEqual(self.check(1,requested="2026-01-09T00:00:00Z")["status"],"FAIL")
     def test_invalid_closure_metadata_fails(self):
         end=datetime(2026,1,7,12,tzinfo=timezone.utc); last=end-timedelta(hours=2)
-        r=g.freshness(end,end.isoformat(),end.isoformat(),"2026-01-07T00:00:00Z",last.isoformat(),3600,[{"start_utc":"bad","end_utc":"bad"}])
+        r=g.freshness(end.isoformat(),end.isoformat(),"2026-01-07T00:00:00Z",last.isoformat(),3600,[{"start_utc":"bad","end_utc":"bad"}])
         self.assertEqual(r["status"],"FAIL")
 
 class ReconstructionTests(unittest.TestCase):
