@@ -3,8 +3,9 @@
 Isolated, demo-research-only GBPUSD historical acquisition on `feat/ecc-orbit-cloudflare-v1`.
 
 ## Execution
-- Daily schedule: 17:20 UTC.
-- Manual: GitHub Actions → ECC GBPUSD historical acquisition → Run workflow.
+- **Manual only:** GitHub Actions → ECC GBPUSD historical acquisition → Run workflow.
+- Automatic schedule and push-triggered acquisition are paused because the latest HistData response was over 13 days stale and the hosted runner received HTTP 403 from Dukascopy.
+- Do not rerun acquisition until a source update or alternative provider can be verified; repeated full-range HistData downloads have returned the same stale cutoff.
 - Requested range: provider start through current UTC acquisition date.
 - Artifacts expire after 30 days; no permanent database or production storage.
 
@@ -17,13 +18,13 @@ Isolated, demo-research-only GBPUSD historical acquisition on `feat/ecc-orbit-cl
 HistData M1 is a sparse provider export, not a guaranteed one-row-per-clock-minute tape. The independent verifier does not invent absent minutes or require 60/240 rows in every candle; it proves that every provider-supplied M1 record was included exactly once and that published candle OHLC and `source_m1_count` match that raw source. Missing/duplicate/out-of-order source records, missing/extra candles and mismatches fail.
 
 ## Source limitations
-- Dukascopy is attempted first; HistData.com is used only when the Dukascopy attempt fails.
+- Dukascopy is attempted first; the hosted GitHub Actions runner currently receives HTTP 403 from the Dukascopy historical endpoint.
+- HistData.com M1 acquisition requested through 2026-11-26 but returned records only through 2026-11-13 21:58 UTC. The requested end date is metadata, not observed coverage.
 - Provenance records the actual selected provider, not merely the first attempted source.
 - HistData M1 OHLC is bid-only. Ask series are never synthesized.
 - This is not an MT5 broker feed and does not establish broker-specific spreads, commission, swaps, slippage or execution.
 - No broker credentials, MT5 connection, order execution, Cloudflare/Supabase changes or production deployment.
 - DCA/grid strategy research remains blocked until every mandatory acceptance gate passes.
-
 
 ## Manual MT5 reference observations
 - A separate `mt5_reference.py` utility validates manually supplied, explicitly time-zoned MT5 observations; it does not connect to MT5 or treat screenshots as historical OHLC.
