@@ -43,7 +43,7 @@ def main():
         grouped=grouped.dropna(subset=["open","high","low","close"])
         grouped=grouped[grouped.index+pd.Timedelta(seconds=seconds)<=now]
         out=pd.DataFrame({
-            "timestamp":(grouped.index.astype("int64")//1_000_000).astype("int64"),
+            "timestamp":(grouped.index.as_unit("ns").asi8//1_000_000).astype("int64"),
             "open":grouped["open"].values,"high":grouped["high"].values,
             "low":grouped["low"].values,"close":grouped["close"].values,
             "source_m1_count":grouped["source_m1_count"].astype(int).values})
