@@ -11,7 +11,7 @@ def load_reference(path):
     if observed.tzinfo is None: raise ValueError("observation_time must include an explicit UTC offset")
     for tf in ("H1","H4"):
         item=data["timeframes"][tf]
-        atr=float(item["atr14_price_units"]); price=float(item["displayed_price"])
+        atr=float(item["atr14_price_units"]); price=float(item.get("displayed_price",data.get("displayed_price",0)))
         if not math.isfinite(atr) or atr<=0 or not math.isfinite(price) or price<=0: raise ValueError(f"invalid {tf} price or ATR")
         if item.get("candle_status") not in ("forming","completed","unknown"): raise ValueError(f"invalid {tf} candle_status")
     return data

@@ -7,6 +7,7 @@ class MT5ReferenceTests(unittest.TestCase):
         p=Path(__file__).parent/"fixtures/mt5-reference-gbpusd-20261126.json"
         d=m.load_reference(p)
         self.assertEqual(d["instrument"],"GBPUSD")
+        self.assertEqual(d["displayed_price"],1.31068)
         self.assertEqual(d["timeframes"]["H1"]["atr14_pips"],11.2)
         self.assertEqual(d["timeframes"]["H4"]["atr14_pips"],26.0)
     def test_unknown_settings_prevent_false_comparison(self):
