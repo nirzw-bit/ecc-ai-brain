@@ -65,15 +65,19 @@ jobs:
           python scripts/forex/fetch_histdata_fallback.py
       - name: Run timestamp and malformed-data regression tests
         run: python -m unittest discover -s scripts/forex -p "test_*.py" -v
+      - name: Run freshness and independent aggregation regression tests
+        run: python -m unittest discover -s scripts/forex -p "test_acceptance_*.py" -v
       - name: Validate OHLC, timestamps, hashes, gaps and Wilder ATR(14)
         run: python scripts/forex/validate_gbpusd.py
-      - name: Preserve provenance metadata
+      - name: Preserve acquisition completion timestamp and provenance
         if: always()
         run: |
           date -u +"%Y-%m-%dT%H:%M:%SZ" > reports/runner-finished-at-utc.txt
           test -f reports/source-metadata.json || cat > reports/source-metadata.json <<'JSON'
-          {"provider":"Dukascopy public historical feed","client":"dukascopy-node 1.51.1","requested_start":"2003-05-04","requested_end":"now","timezone":"UTC","price_types":["bid","ask"],"timeframes":["H1","H4"],"broker_connection":false,"trade_execution":false}
+          {"provider":"UNKNOWN","source_attempts":["Dukascopy public historical feed","HistData.com fallback"],"acquisition_status":"FAILED_OR_METADATA_MISSING","broker_connection":false,"trade_execution":false}
           JSON
+      - name: Enforce source freshness and independent M1-to-H1/H4 reconciliation
+        run: python scripts/forex/acceptance_gates.py
       - name: Upload raw datasets and research report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
