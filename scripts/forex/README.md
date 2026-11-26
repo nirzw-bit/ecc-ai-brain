@@ -23,3 +23,10 @@ HistData M1 is a sparse provider export, not a guaranteed one-row-per-clock-minu
 - This is not an MT5 broker feed and does not establish broker-specific spreads, commission, swaps, slippage or execution.
 - No broker credentials, MT5 connection, order execution, Cloudflare/Supabase changes or production deployment.
 - DCA/grid strategy research remains blocked until every mandatory acceptance gate passes.
+
+
+## Manual MT5 reference observations
+- A separate `mt5_reference.py` utility validates manually supplied, explicitly time-zoned MT5 observations; it does not connect to MT5 or treat screenshots as historical OHLC.
+- The supplied 26 November 2026 GBPUSD H1/H4 screenshot observations are stored in `scripts/forex/fixtures/mt5-reference-gbpusd-20261126.json`.
+- The observation is timestamped in Africa/Kampala UTC+03:00. Broker server timezone, candle boundaries, price side and broker identity remain unknown; both screenshot candles were forming.
+- ATR comparison returns `NOT_COMPARABLE` until timeframe alignment, broker candle boundaries, price basis and ATR calculation settings are established. Values are not forced to match.

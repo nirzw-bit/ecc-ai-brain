@@ -48,8 +48,7 @@ class ReconstructionTests(unittest.TestCase):
             rows=[]
             for ts,items in self.buckets[step].items():
                 if ts+step>as_of: continue
-                vals=[x[1] for x in sorted(items)]
-                d={"timestamp":ts*1000,"open":vals[0]["open"],"high":max(x["high"] for x in vals),"low":min(x["low"] for x in vals),"close":vals[-1]["close"],"source_m1_count":len(vals)}
+                d={"timestamp":ts*1000,**items}
                 if alter and alter[0]==tf: d[alter[1]]+=alter[2]
                 rows.append(d)
             with open(f"data/gbpusd-{tf}-bid.csv","w",newline="") as f:

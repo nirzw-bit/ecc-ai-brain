@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "instrument": "GBPUSD",
+  "observation_time": "2026-11-26T22:03:00+03:00",
+  "observation_timezone": "Africa/Kampala (UTC+03:00)",
+  "source_type": "user-supplied MT5 mobile screenshots",
+  "displayed_price": 1.31068,
+  "price_side": "unknown",
+  "broker": "unknown",
+  "broker_server_timezone": "unknown",
+  "timeframes": {
+    "H1": {
+      "atr_period": 14,
+      "atr14_price_units": 0.00112,
+      "atr14_pips": 11.2,
+      "candle_status": "forming",
+      "visible_resistance_estimate": [1.3117, 1.3123],
+      "visible_support_estimates": [[1.3099, 1.3100], [1.3093, 1.3093]]
+    },
+    "H4": {
+      "atr_period": 14,
+      "atr14_price_units": 0.00260,
+      "atr14_pips": 26.0,
+      "candle_status": "forming",
+      "visible_resistance_estimate": [1.3117, 1.3130],
+      "visible_support_estimates": [[1.3077, 1.3090], [1.3035, 1.3050]]
+    }
+  },
+  "structure_notes": {
+    "H1": "Strong upward impulse followed by pullback and consolidation.",
+    "H4": "Substantial decline toward approximately 1.3017, recovery and subsequent consolidation."
+  },
+  "limitations": [
+    "Screenshot is not an authoritative historical OHLC source.",
+    "Displayed price side is unknown.",
+    "Broker server timezone and candle boundaries are unknown.",
+    "ATR on a forming candle may change before close."
+  ]
+}
